@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { explainSolution } from '../services/deepseekService'
 import problemCards from '../assets/json/grit_lab_africa_problem_cards.json'
 import card1 from '../assets/images/card1.jpeg'
 import card2 from '../assets/images/card2.jpeg'
@@ -218,6 +219,10 @@ function GameHome({ currentUser }) {
   const [roundCount, setRoundCount] = useState(1)
   const [isChanging, setIsChanging] = useState(false)
 
+  const [aiExplanation, setAiExplanation] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+
   const fullName = useMemo(() => {
     if (currentUser?.displayName) {
       return currentUser.displayName
@@ -234,14 +239,36 @@ function GameHome({ currentUser }) {
   const hasAnswered = Boolean(selectedSolution)
   const isCorrect = selectedSolution?.cardId === round.correctSolution.cardId
 
+  async function generateAiExplanation(solution) {
+  setAiExplanation('')
+  setAiError('')
+  setAiLoading(true)
+
+  try {
+    const explanation = await explainSolution({
+      problemCard: round.card,
+      selectedSolution: solution,
+      correctSolution: round.correctSolution
+    })
+
+    setAiExplanation(explanation)
+  } catch (err) {
+    setAiError(err.message || 'AI explanation failed.')
+  } finally {
+    setAiLoading(false)
+  }
+}
+
   function handleSelectSolution(solution) {
-    if (hasAnswered) return
+	if (hasAnswered) return
 
-    setSelectedSolution(solution)
+	setSelectedSolution(solution)
 
-    if (solution.cardId === round.correctSolution.cardId) {
-      setScore((previousScore) => previousScore + 1)
-    }
+	if (solution.cardId === round.correctSolution.cardId) {
+		setScore((previousScore) => previousScore + 1)
+	}
+
+	generateAiExplanation(solution)
   }
 
   function handleNextRound() {
@@ -249,9 +276,12 @@ function GameHome({ currentUser }) {
 
     setTimeout(() => {
       setRound(createRound(cards))
-      setSelectedSolution(null)
-      setRoundCount((previousCount) => previousCount + 1)
-      setIsChanging(false)
+	  setSelectedSolution(null)
+	  setAiExplanation('')
+	  setAiError('')
+	  setAiLoading(false)
+	  setRoundCount((previousCount) => previousCount + 1)
+	  setIsChanging(false)
     }, 450)
   }
 
@@ -631,56 +661,68 @@ function GameHome({ currentUser }) {
           </div>
 
           {hasAnswered && (
-            <div
-              style={{
-                padding: '24px',
-                borderRadius: '28px',
-                background: isCorrect
-                  ? 'rgba(255, 255, 255, 0.74)'
-                  : 'rgba(92, 53, 18, 0.92)',
-                border: isCorrect
-                  ? '1px solid rgba(139, 92, 40, 0.18)'
-                  : '1px solid rgba(255, 255, 255, 0.14)',
-                color: isCorrect ? '#3b2817' : '#fff8eb',
-                boxShadow: '0 18px 42px rgba(80, 52, 20, 0.14)',
-                animation: 'fadeIn 0.35s ease'
-              }}
-            >
-              <p
-                style={{
-                  margin: '0 0 10px',
-                  color: isCorrect ? '#9a6a22' : '#f4d28a',
-                  fontSize: '0.74rem',
-                  fontWeight: '850',
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase'
-                }}
-              >
-                {isCorrect ? 'Well done' : 'Good attempt'}
-              </p>
+			<div
+			  style={{
+			  padding: '24px',
+              borderRadius: '28px',
+			  background:
+			  'linear-gradient(135deg, rgba(255, 248, 235, 0.88), rgba(244, 210, 138, 0.42))',
+			  border: '1px solid rgba(154, 106, 34, 0.22)',
+			  color: '#3b2817',
+			  boxShadow: '0 18px 42px rgba(80, 52, 20, 0.14)',
+			  animation: 'fadeIn 0.35s ease'
+			  }}
+			>
+			<p
+	 		  style={{
+              margin: '0 0 10px',
+			  color: '#9a6a22',
+			  fontSize: '0.74rem',
+			  fontWeight: '850',
+			  letterSpacing: '0.14em',
+			  textTransform: 'uppercase'
+			  }}
+			>
+			  AI Explanation
+			</p>
 
-              <h3
-                style={{
-                  margin: '0 0 10px',
-                  fontSize: '1.45rem',
-                  lineHeight: '1.15',
-                  letterSpacing: '-0.04em'
-                }}
-              >
-                The best answer is: {round.correctSolution.title}
-              </h3>
+    {aiLoading && (
+      <p
+        style={{
+          margin: '0',
+          lineHeight: '1.65',
+          color: '#5c4632'
+        }}
+      >
+        DeepSeek is explaining the solution...
+      </p>
+    )}
 
-              <p
-                style={{
-                  margin: '0',
-                  lineHeight: '1.65',
-                  opacity: 0.86
-                }}
-              >
-                This links to the problem because: {round.correctSolution.description}
-              </p>
-            </div>
-          )}
+    {aiError && (
+      <p
+        style={{
+          margin: '0',
+          lineHeight: '1.65',
+          color: '#7f1d1d'
+        }}
+      >
+        {aiError}
+      </p>
+    )}
+
+    {aiExplanation && (
+      <p
+        style={{
+          margin: '0',
+          lineHeight: '1.65',
+          color: '#5c4632'
+        }}
+      >
+        {aiExplanation}
+      </p>
+    )}
+  </div>
+)}
 
           <div
             style={{
