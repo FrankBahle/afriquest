@@ -1,3 +1,5 @@
+// This function sends the current game problem and selected solution
+// to our backend DeepSeek API function, then returns the AI explanation.
 export async function explainSolution({
   problemCard,
   selectedSolution,
