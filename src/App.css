@@ -540,3 +540,308 @@ button {
 .mediaFadeOut {
   opacity: 0;
 }
+
+/* ============================================================
+   RESPONSIVE / MOBILE FIXES
+   Add this at the bottom of src/App.css
+   ============================================================ */
+
+/* Prevent sideways scrolling on phones */
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+/* Tablet screens */
+@media (max-width: 900px) {
+  .app {
+    padding: 18px;
+  }
+
+  .navbar {
+    width: 100%;
+    top: 12px;
+    gap: 14px;
+  }
+
+  .heroArea {
+    width: 100%;
+    margin: 28px auto 50px;
+  }
+
+  .heroMediaCard {
+    min-height: 560px;
+  }
+
+  .heroContentCard {
+    width: calc(100% - 36px);
+    margin: 46px auto;
+    padding: 30px;
+  }
+
+  .heroContentCard h1 {
+    font-size: 2.5rem;
+  }
+
+  #contact {
+    width: 100% !important;
+    margin: 45px auto 65px !important;
+  }
+
+  #contact > div {
+    padding: 34px !important;
+    border-radius: 28px !important;
+  }
+
+  #contact h3 {
+    font-size: 2.3rem !important;
+  }
+
+  .footer {
+    margin-top: 55px;
+  }
+}
+
+/* Phone screens */
+@media (max-width: 600px) {
+  .app {
+    padding: 12px;
+  }
+
+  .navbar {
+    width: 100%;
+    padding: 12px;
+    border-radius: 18px;
+    gap: 12px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .brand span {
+    font-size: 0.95rem;
+  }
+
+  .navLinks {
+    order: 3;
+    width: 100%;
+    padding: 8px 10px;
+    gap: 14px;
+    justify-content: center;
+  }
+
+  .navLinks a {
+    font-size: 0.86rem;
+  }
+
+  .navActions {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .loginButton,
+  .startButton,
+  .glassButton {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+
+  .heroArea {
+    width: 100%;
+    margin: 22px auto 42px;
+  }
+
+  .heroMediaCard {
+    min-height: 620px;
+    border-radius: 24px;
+  }
+
+  .heroContentCard {
+    width: calc(100% - 24px);
+    margin: 36px auto;
+    padding: 22px;
+    border-radius: 24px;
+  }
+
+  .heroTag {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+  }
+
+  .heroContentCard h1 {
+    font-size: 2rem;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+  }
+
+  .heroContentCard p {
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .heroButtons {
+    flex-direction: column;
+  }
+
+  .heroButtons button {
+    width: 100%;
+  }
+
+  #contact {
+    width: 100% !important;
+    margin: 35px auto 55px !important;
+  }
+
+  #contact > div {
+    padding: 24px !important;
+    border-radius: 24px !important;
+  }
+
+  #contact h3 {
+    font-size: 2rem !important;
+    line-height: 1.05 !important;
+  }
+
+  #contact > div > div:last-child {
+    grid-template-columns: 1fr !important;
+  }
+
+  .footer {
+    padding: 24px 18px;
+    gap: 12px;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .brand span {
+    font-size: 0.86rem;
+  }
+
+  .navLinks {
+    gap: 10px;
+  }
+
+  .loginButton,
+  .startButton,
+  .glassButton {
+    font-size: 0.82rem;
+    padding: 9px 11px;
+  }
+
+  .heroContentCard h1 {
+    font-size: 1.75rem;
+  }
+}
+
+/* ============================================================
+   GAME PAGE RESPONSIVE FIXES
+   These work after adding classNames in GameHome.jsx
+   ============================================================ */
+
+@media (max-width: 1000px) {
+  .gameSection {
+    width: calc(100vw - 28px) !important;
+    margin: 28px auto 60px !important;
+  }
+
+  .gameShell {
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+    padding: 30px !important;
+    gap: 28px !important;
+    border-radius: 30px !important;
+  }
+
+  .gameStats {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .problemCardVisual {
+    min-height: 420px !important;
+    transform: none !important;
+  }
+
+  .solutionGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .solutionGrid button {
+    min-height: auto !important;
+  }
+
+  .gameBottomGrid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .gameSection {
+    width: 100% !important;
+    margin: 24px auto 50px !important;
+  }
+
+  .gameShell {
+    padding: 20px !important;
+    gap: 22px !important;
+    border-radius: 24px !important;
+  }
+
+  .gameLeft h1 {
+    font-size: 2.3rem !important;
+    line-height: 1 !important;
+  }
+
+  .gameLeft p {
+    font-size: 0.95rem !important;
+  }
+
+  .gameStats {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .problemCardVisual {
+    min-height: 360px !important;
+    border-radius: 24px !important;
+  }
+
+  .gameRight {
+    gap: 14px !important;
+  }
+
+  .solutionGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .solutionGrid button {
+    width: 100% !important;
+    padding: 17px !important;
+    border-radius: 20px !important;
+  }
+
+  .gameBottomGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .nextProblemButton {
+    width: 100% !important;
+  }
+}
+

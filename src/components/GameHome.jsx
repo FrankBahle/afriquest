@@ -287,12 +287,14 @@ function GameHome({ currentUser }) {
 
   return (
     <section
+      className="gameSection"
       style={{
         width: 'min(1450px, calc(100vw - 48px))',
         margin: '40px auto 80px'
       }}
     >
       <div
+        className="gameShell"
         style={{
           minHeight: '720px',
           padding: '44px',
@@ -311,6 +313,7 @@ function GameHome({ currentUser }) {
         }}
       >
         <div
+          className="gameLeft"
           style={{
             opacity: isChanging ? 0 : 1,
             transform: isChanging ? 'translateY(14px)' : 'translateY(0)',
@@ -357,6 +360,7 @@ function GameHome({ currentUser }) {
           </p>
 
           <div
+            className="gameStats"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',
@@ -450,6 +454,7 @@ function GameHome({ currentUser }) {
           </div>
 
           <div
+            className="problemCardVisual"
             style={{
               position: 'relative',
               minHeight: '510px',
@@ -526,6 +531,7 @@ function GameHome({ currentUser }) {
         </div>
 
         <div
+          className="gameRight"
           style={{
             display: 'grid',
             gap: '18px',
@@ -570,6 +576,7 @@ function GameHome({ currentUser }) {
           </div>
 
           <div
+            className="solutionGrid"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
@@ -725,6 +732,7 @@ function GameHome({ currentUser }) {
 )}
 
           <div
+            className="gameBottomGrid"
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 0.8fr',
@@ -832,6 +840,7 @@ function GameHome({ currentUser }) {
           </div>
 
           <button
+            className="nextProblemButton"
             onClick={handleNextRound}
             style={{
               width: 'fit-content',
