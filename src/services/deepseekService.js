@@ -1,9 +1,8 @@
-// This function sends the current game problem and selected solution
-// to our backend DeepSeek API function, then returns the AI explanation.
-export async function explainSolution({
+export async function gradeExplanation({
   problemCard,
   selectedSolution,
-  correctSolution
+  correctSolution,
+  userExplanation
 }) {
   const response = await fetch('/api/deepseek/explain', {
     method: 'POST',
@@ -13,15 +12,19 @@ export async function explainSolution({
     body: JSON.stringify({
       problemCard,
       selectedSolution,
-      correctSolution
+      correctSolution,
+      userExplanation
     })
   })
 
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.error || 'Could not generate AI explanation.')
+    throw new Error(data.error || 'Could not grade explanation.')
   }
 
-  return data.explanation
+  return {
+    grade: data.grade,
+    feedback: data.feedback
+  }
 }
