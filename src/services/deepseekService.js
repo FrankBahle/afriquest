@@ -1,7 +1,7 @@
 export async function gradeExplanation({
   problemCard,
   selectedSolution,
-  correctSolution,
+  selectedAiCards = [],
   userExplanation
 }) {
   const response = await fetch('/api/deepseek/explain', {
@@ -12,7 +12,7 @@ export async function gradeExplanation({
     body: JSON.stringify({
       problemCard,
       selectedSolution,
-      correctSolution,
+      selectedAiCards,
       userExplanation
     })
   })
@@ -20,11 +20,8 @@ export async function gradeExplanation({
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.error || 'Could not grade explanation.')
+    throw new Error(data.error || 'Could not score explanation.')
   }
 
-  return {
-    grade: data.grade,
-    feedback: data.feedback
-  }
+  return data
 }
