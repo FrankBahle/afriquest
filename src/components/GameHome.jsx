@@ -338,12 +338,42 @@ const pageCss = `
   .glaPageTitle { margin:0; color:#5c3512; font-size:0.9rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
   .glaSidebarOverlay { position:fixed; inset:0; z-index:9999; pointer-events:none; overflow:hidden; }
   .glaSidebarOverlay.open { pointer-events:auto; }
-  .glaSidebarBackdrop { position:absolute; inset:0; border:0; padding:0; cursor:pointer; background:rgba(20,13,8,0); transition:background 0.28s ease; }
-  .glaSidebarOverlay.open .glaSidebarBackdrop { background:rgba(20,13,8,0.42); }
-  .glaSidebarDrawer { position:fixed; top:0; left:0; bottom:0; height:100dvh; width:min(360px, 90vw); transform:translateX(-105%); opacity:0; transition:transform 0.32s cubic-bezier(0.2,0.8,0.2,1), opacity 0.24s ease; will-change:transform; }
-  .glaSidebarOverlay.open .glaSidebarDrawer { transform:translateX(0); opacity:1; }
+  .glaSidebarBackdrop {
+            position: fixed;
+            inset: 0;
+            border: 0;
+            padding: 0;
+            cursor: pointer;
+            background: rgba(20, 13, 8, 0);
+            backdrop-filter: blur(0);
+            -webkit-backdrop-filter: blur(0);
+            transition:
+              background 0.28s ease,
+              backdrop-filter 0.28s ease,
+              -webkit-backdrop-filter 0.28s ease;
+          }
+  .glaSidebarOverlay.open .glaSidebarBackdrop {
+            background: rgba(20, 13, 8, 0.42);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+          }
+  .glaSidebarDrawer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            height: 100dvh;
+            width: min(360px, 90vw);
+            z-index: 2;
+            transform: translateX(-105%);
+            transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+            will-change: transform;
+          }
+  .glaSidebarOverlay.open .glaSidebarDrawer {
+            transform: translateX(0);
+          }
   .glaGameContent { width:100%; min-width:0; }
-  .glaJourneyTabs { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:18px; padding:10px; border-radius:26px; background:rgba(255,255,255,0.58); border:1px solid rgba(139,92,40,0.16); box-shadow:0 18px 42px rgba(80,52,20,0.1); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
+  .glaJourneyTabs { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:18px; padding:10px; border-radius:26px; background:rgba(255,255,255,0.58); border:1px solid rgba(139,92,40,0.16); box-shadow:0 18px 42px rgba(80,52,20,0.1); -webkit- }
   .glaJourneyTabButton { border:1px solid rgba(139,92,40,0.14); border-radius:20px; padding:13px 14px; text-align:left; cursor:pointer; background:rgba(255,255,255,0.62); color:#5c3512; transition:transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
   .glaJourneyTabButton:hover { transform:translateY(-2px); border-color:rgba(154,106,34,0.35); box-shadow:0 14px 28px rgba(80,52,20,0.12); }
   .glaJourneyTabButton.active { background:linear-gradient(135deg,#9a6a22,#5c3512); color:#fff8eb; border-color:rgba(244,210,138,0.4); box-shadow:0 18px 36px rgba(92,53,18,0.22); }

@@ -40,7 +40,7 @@ function GameSidebar({
             max-height: 100dvh;
             padding: 14px;
             background:
-              linear-gradient(145deg, rgba(92, 53, 18, 0.96), rgba(18, 18, 18, 0.94)),
+              linear-gradient(145deg, #5c3512, #121212),
               radial-gradient(circle at top left, rgba(244, 210, 138, 0.26), transparent 22rem);
             border-right: 1px solid rgba(244, 210, 138, 0.22);
             box-shadow: 0 26px 70px rgba(45, 27, 10, 0.28);
