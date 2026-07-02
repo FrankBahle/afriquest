@@ -30,3 +30,5 @@ export const aiCards = [
   { id: 29, title: 'AI Future Skills Recommender', type: 'Skills Recommendation AI', canDo: 'Recommends courses, skills and career paths based on opportunities.', examples: ['Course suggestions', 'Skills gap analysis', 'Career pathways'], question: 'How could AI help people prepare for future work?' },
   { id: 30, title: 'AI Community Early-Warning System', type: 'Social Problem Prediction AI', canDo: 'Helps communities identify small problems before they become bigger.', examples: ['Risk patterns', 'Community alerts', 'Prevention planning'], question: 'How could AI help communities act earlier?' }
 ]
+
+export default aiCards
