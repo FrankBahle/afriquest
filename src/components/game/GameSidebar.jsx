@@ -44,8 +44,6 @@ function GameSidebar({
               radial-gradient(circle at top left, rgba(244, 210, 138, 0.26), transparent 22rem);
             border-right: 1px solid rgba(244, 210, 138, 0.22);
             box-shadow: 0 26px 70px rgba(45, 27, 10, 0.28);
-            backdrop-filter: blur(22px);
-            -webkit-backdrop-filter: blur(22px);
             color: #fff8eb;
             overflow-y: auto;
             overflow-x: hidden;

@@ -338,8 +338,8 @@ const pageCss = `
   .glaPageTitle { margin:0; color:#5c3512; font-size:0.9rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
   .glaSidebarOverlay { position:fixed; inset:0; z-index:9999; pointer-events:none; overflow:hidden; }
   .glaSidebarOverlay.open { pointer-events:auto; }
-  .glaSidebarBackdrop { position:absolute; inset:0; border:0; padding:0; cursor:pointer; background:rgba(20,13,8,0); backdrop-filter:blur(0); -webkit-backdrop-filter:blur(0); transition:background 0.28s ease, backdrop-filter 0.28s ease; }
-  .glaSidebarOverlay.open .glaSidebarBackdrop { background:rgba(20,13,8,0.42); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+  .glaSidebarBackdrop { position:absolute; inset:0; border:0; padding:0; cursor:pointer; background:rgba(20,13,8,0); transition:background 0.28s ease; }
+  .glaSidebarOverlay.open .glaSidebarBackdrop { background:rgba(20,13,8,0.42); }
   .glaSidebarDrawer { position:fixed; top:0; left:0; bottom:0; height:100dvh; width:min(360px, 90vw); transform:translateX(-105%); opacity:0; transition:transform 0.32s cubic-bezier(0.2,0.8,0.2,1), opacity 0.24s ease; will-change:transform; }
   .glaSidebarOverlay.open .glaSidebarDrawer { transform:translateX(0); opacity:1; }
   .glaGameContent { width:100%; min-width:0; }
