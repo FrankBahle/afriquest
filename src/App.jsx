@@ -3,6 +3,7 @@ import './App.css'
 import AuthModal from './components/AuthModal'
 import { useAuth } from './context/AuthContext'
 import GameHome from './components/GameHome'
+import AdminApp from './components/admin/AdminApp'
 
 import logo from './assets/images/logo.png'
 import city1 from './assets/images/city1.png'
@@ -41,6 +42,16 @@ const backgroundMedia = [
 ]
 
 function App() {
+  const isAdminRoute = window.location.pathname.toLowerCase().startsWith('/admin')
+
+  if (isAdminRoute) {
+    return <AdminApp />
+  }
+
+  return <PlayerApp />
+}
+
+function PlayerApp() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
   const [isFading, setIsFading] = useState(false)
   const [authMode, setAuthMode] = useState('login')
@@ -103,6 +114,12 @@ function App() {
         </div>
 
         <div className="navActions">
+          {!currentUser && (
+            <a href="/admin" style={adminNavButtonStyle}>
+              Admin Login
+            </a>
+          )}
+
           <button onClick={handleAuthClick} className="loginButton">
             {currentUser ? 'Logout' : 'Login'}
           </button>
@@ -176,6 +193,24 @@ function App() {
                   </button>
 
                   <button className="glassButton">Explore Project</button>
+                </div>
+
+                <div style={entryCardsGridStyle}>
+                  <button type="button" onClick={handleStartQuest} style={entryCardStyle}>
+                    <span style={entryCardIconStyle}>🎮</span>
+                    <span>
+                      <strong style={entryCardTitleStyle}>Player / Student</strong>
+                      <span style={entryCardTextStyle}>Register or login to play the AI for SDGs card game.</span>
+                    </span>
+                  </button>
+
+                  <a href="/admin" style={{ ...entryCardStyle, textDecoration: 'none' }}>
+                    <span style={entryCardIconStyle}>🛡️</span>
+                    <span>
+                      <strong style={entryCardTitleStyle}>Admin Access</strong>
+                      <span style={entryCardTextStyle}>Open the admin login for card, rubric, language and analytics management.</span>
+                    </span>
+                  </a>
                 </div>
               </div>
             </div>
@@ -430,6 +465,72 @@ function App() {
       )}
     </main>
   )
+}
+
+
+const adminNavButtonStyle = {
+  border: '1px solid rgba(139, 92, 40, 0.22)',
+  borderRadius: '999px',
+  padding: '10px 18px',
+  background: 'rgba(255, 255, 255, 0.68)',
+  color: '#5c3512',
+  textDecoration: 'none',
+  fontWeight: '850',
+  boxShadow: '0 12px 26px rgba(80, 52, 20, 0.1)'
+}
+
+const entryCardsGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+  gap: '14px',
+  marginTop: '22px'
+}
+
+const entryCardStyle = {
+  width: '100%',
+  minHeight: '112px',
+  padding: '18px',
+  border: '1px solid rgba(244, 210, 138, 0.24)',
+  borderRadius: '24px',
+  display: 'grid',
+  gridTemplateColumns: '44px 1fr',
+  gap: '13px',
+  alignItems: 'center',
+  textAlign: 'left',
+  cursor: 'pointer',
+  background: 'rgba(255, 255, 255, 0.13)',
+  color: '#fff8eb',
+  boxShadow: '0 18px 38px rgba(0, 0, 0, 0.18)',
+  backdropFilter: 'blur(14px)',
+  WebkitBackdropFilter: 'blur(14px)'
+}
+
+const entryCardIconStyle = {
+  width: '44px',
+  height: '44px',
+  borderRadius: '16px',
+  display: 'grid',
+  placeItems: 'center',
+  background: 'linear-gradient(135deg, #f4d28a, #9a6a22)',
+  color: '#3b2817',
+  fontSize: '1.15rem',
+  fontWeight: '900'
+}
+
+const entryCardTitleStyle = {
+  display: 'block',
+  color: '#fff8eb',
+  fontSize: '1rem',
+  fontWeight: '900',
+  lineHeight: '1.15'
+}
+
+const entryCardTextStyle = {
+  display: 'block',
+  marginTop: '5px',
+  color: 'rgba(255, 248, 235, 0.76)',
+  fontSize: '0.86rem',
+  lineHeight: '1.45'
 }
 
 export default App

@@ -1,6 +1,10 @@
+import { styles } from './gameStyles'
+import { ActionButton, DataTable, EmptyState, MetricCard, Pill, SectionHeader } from './ui'
+
 function PlayerDashboardScreen({
   firstName,
-  selectedProblemCount,
+  selectedProblemStack,
+  completedProblemRows,
   completedProblems,
   averageScore,
   certificateUnlocked,
@@ -14,363 +18,121 @@ function PlayerDashboardScreen({
   latestAttempt,
   onOpenCoinHistory,
   onOpenLatestScore,
-  onOpenCertificate
+  onOpenCertificate,
+  onOpenProfile
 }) {
   return (
-    <div style={panelStyle}>
-      <p style={eyebrowStyle}>Player dashboard</p>
+    <div style={styles.panel}>
+      <SectionHeader eyebrow="Player dashboard" title="Your GRIT Lab Africa progress.">
+        This dashboard shows your selected problem stack, completed problems, best scores, attempts and GLA coin activity.
+      </SectionHeader>
 
-      <h1 style={sectionTitleStyle}>Your GRIT Lab Africa progress.</h1>
-
-      <p style={paragraphStyle}>
-        This dashboard shows your selected cards, completed problems, score
-        progress, attempts, best scores and GLA coin balance.
-      </p>
-
-      <div style={metricGridStyle}>
+      <div style={styles.metricGrid}>
         <MetricCard title="Player" value={firstName} />
-        <MetricCard title="Selected Problems" value={selectedProblemCount} />
+        <MetricCard title="Selected Problems" value={selectedProblemStack.length} />
         <MetricCard title="Completed Problems" value={completedProblems} />
         <MetricCard title="Average Score" value={`${averageScore}%`} />
         <MetricCard title="Current GLA Coin" value={glaCoinBalance} />
         <MetricCard title="Total Earned" value={totalGlaCoinEarned} />
         <MetricCard title="Spent on Hints" value={glaCoinSpentOnHints} />
-        <MetricCard
-          title="Certificate"
-          value={certificateUnlocked ? 'Unlocked' : 'Locked'}
-        />
+        <MetricCard title="Certificate" value={certificateUnlocked ? 'Unlocked' : 'Locked'} />
       </div>
 
-      <div style={twoColumnGridStyle}>
-        <div style={{ ...smallCardStyle, marginTop: '18px' }}>
-          <p style={eyebrowStyle}>Best-scoring problem cards</p>
-
+      <div style={styles.twoColumnGrid}>
+        <div style={{ ...styles.smallCard, marginTop: '18px' }}>
+          <p style={styles.eyebrow}>Best-scoring problem cards</p>
           {bestScoringProblems.length === 0 ? (
-            <p style={smallCardTextStyle}>
-              No best scores yet. Submit your first solution to start tracking.
-            </p>
+            <EmptyState title="No best scores yet">Submit your first solution to start tracking best-scoring problem cards.</EmptyState>
           ) : (
-            <div style={listGridStyle}>
+            <div style={styles.listGrid}>
               {bestScoringProblems.map((item, index) => (
                 <div key={item.problemId} style={historyItemStyle}>
-                  <strong style={{ color: '#5c3512' }}>
-                    {index + 1}. {item.problemTitle}
-                  </strong>
-                  <span style={scoreBadgeStyle}>{item.bestScore}/100</span>
+                  <strong style={{ color: '#5c3512' }}>{index + 1}. {item.problemTitle}</strong>
+                  <Pill>{item.bestScore}/100</Pill>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div style={{ ...smallCardStyle, marginTop: '18px' }}>
-          <p style={eyebrowStyle}>Certificate status</p>
-
-          <h3 style={smallCardTitleStyle}>
-            {certificateUnlocked ? 'Certificate unlocked' : 'Certificate locked'}
-          </h3>
-
-          <p style={smallCardTextStyle}>
-            Complete 10 problem cards with an average score of 75 or higher.
-            Current progress: {certificationProgress}/10 with an average of{' '}
-            {averageScore}%.
-          </p>
+        <div style={{ ...styles.smallCard, marginTop: '18px' }}>
+          <p style={styles.eyebrow}>Certificate status</p>
+          <h3 style={styles.smallCardTitle}>{certificateUnlocked ? 'Certificate unlocked' : 'Certificate locked'}</h3>
+          <p style={styles.smallCardText}>Complete 10 problem cards with an average score of 75 or higher. Current progress: {certificationProgress}/10 with an average of {averageScore}%.</p>
         </div>
       </div>
 
-      <div style={{ ...smallCardStyle, marginTop: '18px' }}>
-        <p style={eyebrowStyle}>First / latest / best score view</p>
-
-        {Object.values(attemptStatsByProblem).length === 0 ? (
-          <p style={smallCardTextStyle}>
-            No attempt history yet. Submit a solution first.
-          </p>
-        ) : (
-          <div style={tableWrapperStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>Problem</th>
-                  <th style={thStyle}>First</th>
-                  <th style={thStyle}>Latest</th>
-                  <th style={thStyle}>Best</th>
-                  <th style={thStyle}>Attempts</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {Object.values(attemptStatsByProblem).map((stats) => (
-                  <tr key={stats.problemId}>
-                    <td style={tdStyle}>{stats.problemTitle}</td>
-                    <td style={tdStyle}>{stats.first.totalScore}/100</td>
-                    <td style={tdStyle}>{stats.latest.totalScore}/100</td>
-                    <td style={tdStyle}>{stats.best.totalScore}/100</td>
-                    <td style={tdStyle}>{stats.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div style={{ ...styles.smallCard, marginTop: '18px' }}>
+        <p style={styles.eyebrow}>Completed problem cards list</p>
+        <DataTable
+          columns={[
+            { key: 'problemTitle', label: 'Problem' },
+            { key: 'bestScore', label: 'Best Score', render: (row) => `${row.bestScore}/100` },
+            { key: 'latestScore', label: 'Latest Score', render: (row) => `${row.latestScore}/100` },
+            { key: 'attempts', label: 'Attempts' }
+          ]}
+          rows={completedProblemRows}
+          emptyText="Completed problem cards will appear here after submissions."
+        />
       </div>
 
-      <div style={{ ...smallCardStyle, marginTop: '18px' }}>
-        <p style={eyebrowStyle}>Attempt history</p>
+      <div style={{ ...styles.smallCard, marginTop: '18px' }}>
+        <p style={styles.eyebrow}>Selected problem stack full view</p>
+        <div style={{ ...styles.cardGrid, marginTop: '12px' }}>
+          {selectedProblemStack.map((card) => (
+            <div key={card.id} style={styles.smallCard}>
+              <h3 style={styles.smallCardTitle}>{card.title}</h3>
+              <p style={styles.smallCardText}>{card.problem}</p>
+              <div style={{ marginTop: '10px' }}><Pill>{card.problem_type}</Pill></div>
+            </div>
+          ))}
+          {selectedProblemStack.length === 0 && <EmptyState title="No selected cards">Select problem cards from the Play Journey screen.</EmptyState>}
+        </div>
+      </div>
 
-        {attempts.length === 0 ? (
-          <p style={smallCardTextStyle}>
-            Your attempts will appear here after you submit solutions.
-          </p>
-        ) : (
-          <div style={listGridStyle}>
+      <div style={{ ...styles.smallCard, marginTop: '18px' }}>
+        <p style={styles.eyebrow}>First / latest / best score view</p>
+        <DataTable
+          columns={[
+            { key: 'problemTitle', label: 'Problem' },
+            { key: 'first', label: 'First', render: (row) => `${row.first.totalScore}/100` },
+            { key: 'latest', label: 'Latest', render: (row) => `${row.latest.totalScore}/100` },
+            { key: 'best', label: 'Best', render: (row) => `${row.best.totalScore}/100` },
+            { key: 'count', label: 'Attempts' }
+          ]}
+          rows={Object.values(attemptStatsByProblem)}
+          emptyText="Submit a solution first."
+        />
+      </div>
+
+      <div style={{ ...styles.smallCard, marginTop: '18px' }}>
+        <p style={styles.eyebrow}>Attempt history</p>
+        {attempts.length === 0 ? <EmptyState title="No attempts yet">Your attempts will appear here after you submit solutions.</EmptyState> : (
+          <div style={styles.listGrid}>
             {[...attempts].reverse().map((attempt) => (
               <div key={attempt.id} style={attemptCardStyle}>
-                <div style={rowBetweenStyle}>
-                  <div>
-                    <h3 style={smallCardTitleStyle}>{attempt.problemTitle}</h3>
-
-                    <p style={smallCardTextStyle}>
-                      Attempt #{attempt.attemptNumber} • {attempt.createdAt}
-                    </p>
-                  </div>
-
-                  <span style={scoreBadgeStyle}>{attempt.totalScore}/100</span>
+                <div style={styles.rowBetween}>
+                  <div><h3 style={styles.smallCardTitle}>{attempt.problemTitle}</h3><p style={styles.smallCardText}>Attempt #{attempt.attemptNumber} • {attempt.createdAt}</p></div>
+                  <Pill>{attempt.totalScore}/100</Pill>
                 </div>
-
-                <p style={{ ...smallCardTextStyle, marginTop: '10px' }}>
-                  {attempt.feedback}
-                </p>
+                <p style={{ ...styles.smallCardText, marginTop: '10px' }}>{attempt.feedback}</p>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div style={centerButtonRowStyle}>
-        <button onClick={onOpenCoinHistory} style={primaryButtonStyle}>
-          View GLA Coin History
-        </button>
-
-        <button
-          onClick={onOpenLatestScore}
-          disabled={!latestAttempt}
-          style={{
-            ...secondaryButtonStyle,
-            opacity: latestAttempt ? 1 : 0.45,
-            cursor: latestAttempt ? 'pointer' : 'default'
-          }}
-        >
-          View Latest Score
-        </button>
-
-        <button onClick={onOpenCertificate} style={secondaryButtonStyle}>
-          View Certificate
-        </button>
+      <div style={styles.centerButtonRow}>
+        <ActionButton onClick={onOpenCoinHistory}>View GLA Coin History</ActionButton>
+        <ActionButton variant="secondary" onClick={onOpenLatestScore} disabled={!latestAttempt}>View Latest Score</ActionButton>
+        <ActionButton variant="secondary" onClick={onOpenCertificate}>View Certificate</ActionButton>
+        <ActionButton variant="secondary" onClick={onOpenProfile}>Player Profile</ActionButton>
       </div>
     </div>
   )
 }
 
-function MetricCard({ title, value }) {
-  return (
-    <div style={metricCardStyle}>
-      <strong style={metricValueStyle}>{value}</strong>
-      <span style={metricTitleStyle}>{title}</span>
-    </div>
-  )
-}
-
-const panelStyle = {
-  padding: '36px',
-  borderRadius: '34px',
-  background:
-    'linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(232, 214, 170, 0.68))',
-  border: '1px solid rgba(139, 92, 40, 0.22)',
-  boxShadow: '0 30px 80px rgba(80, 52, 20, 0.18)',
-  backdropFilter: 'blur(20px)',
-  WebkitBackdropFilter: 'blur(20px)'
-}
-
-const eyebrowStyle = {
-  margin: '0 0 10px',
-  color: '#9a6a22',
-  fontSize: '0.74rem',
-  fontWeight: '850',
-  letterSpacing: '0.14em',
-  textTransform: 'uppercase'
-}
-
-const sectionTitleStyle = {
-  margin: '0 0 18px',
-  color: '#4b2b10',
-  fontSize: 'clamp(2.2rem, 4vw, 3.8rem)',
-  lineHeight: '1',
-  letterSpacing: '-0.06em',
-  fontWeight: '900'
-}
-
-const paragraphStyle = {
-  margin: '0',
-  color: '#5c4632',
-  fontSize: '1rem',
-  lineHeight: '1.7'
-}
-
-const metricGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-  gap: '12px',
-  marginTop: '18px'
-}
-
-const metricCardStyle = {
-  padding: '18px',
-  borderRadius: '22px',
-  background: 'rgba(255, 255, 255, 0.6)',
-  border: '1px solid rgba(139, 92, 40, 0.16)'
-}
-
-const metricValueStyle = {
-  display: 'block',
-  color: '#5c3512',
-  fontSize: '1.55rem',
-  lineHeight: '1.1',
-  overflowWrap: 'anywhere'
-}
-
-const metricTitleStyle = {
-  color: '#6b5540',
-  fontSize: '0.9rem',
-  fontWeight: '650'
-}
-
-const twoColumnGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-  gap: '16px',
-  marginTop: '18px'
-}
-
-const smallCardStyle = {
-  padding: '20px',
-  borderRadius: '24px',
-  background: 'rgba(255, 255, 255, 0.66)',
-  border: '1px solid rgba(139, 92, 40, 0.18)',
-  boxShadow: '0 14px 34px rgba(80, 52, 20, 0.1)'
-}
-
-const smallCardTitleStyle = {
-  margin: '0 0 10px',
-  color: '#5c3512',
-  fontSize: '1.2rem',
-  lineHeight: '1.2',
-  letterSpacing: '-0.035em'
-}
-
-const smallCardTextStyle = {
-  margin: '0',
-  color: '#5c4632',
-  lineHeight: '1.6',
-  fontSize: '0.94rem'
-}
-
-const listGridStyle = {
-  display: 'grid',
-  gap: '12px',
-  marginTop: '12px'
-}
-
-const historyItemStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  padding: '14px',
-  borderRadius: '18px',
-  background: 'rgba(255, 255, 255, 0.62)',
-  border: '1px solid rgba(139, 92, 40, 0.12)'
-}
-
-const scoreBadgeStyle = {
-  display: 'inline-flex',
-  padding: '9px 12px',
-  borderRadius: '999px',
-  background: 'rgba(154, 106, 34, 0.13)',
-  color: '#5c3512',
-  fontWeight: '900'
-}
-
-const tableWrapperStyle = {
-  width: '100%',
-  overflowX: 'auto',
-  marginTop: '14px'
-}
-
-const tableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  minWidth: '680px'
-}
-
-const thStyle = {
-  textAlign: 'left',
-  padding: '12px',
-  color: '#5c3512',
-  borderBottom: '1px solid rgba(139, 92, 40, 0.2)',
-  background: 'rgba(255, 255, 255, 0.5)'
-}
-
-const tdStyle = {
-  padding: '12px',
-  color: '#5c4632',
-  borderBottom: '1px solid rgba(139, 92, 40, 0.12)'
-}
-
-const attemptCardStyle = {
-  padding: '16px',
-  borderRadius: '20px',
-  background: 'rgba(255, 255, 255, 0.58)',
-  border: '1px solid rgba(139, 92, 40, 0.14)'
-}
-
-const rowBetweenStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '14px',
-  flexWrap: 'wrap'
-}
-
-const centerButtonRowStyle = {
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  gap: '10px',
-  flexWrap: 'wrap',
-  marginTop: '26px'
-}
-
-const primaryButtonStyle = {
-  border: '0',
-  borderRadius: '999px',
-  padding: '13px 24px',
-  cursor: 'pointer',
-  background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
-  color: '#fff8eb',
-  fontWeight: '850',
-  fontSize: '0.95rem',
-  boxShadow: '0 14px 30px rgba(92, 53, 18, 0.22)'
-}
-
-const secondaryButtonStyle = {
-  border: '1px solid rgba(139, 92, 40, 0.22)',
-  borderRadius: '999px',
-  padding: '13px 20px',
-  cursor: 'pointer',
-  background: 'rgba(255, 255, 255, 0.68)',
-  color: '#5c3512',
-  fontWeight: '850'
-}
+const historyItemStyle = { display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.62)', border: '1px solid rgba(139,92,40,0.12)' }
+const attemptCardStyle = { padding: '16px', borderRadius: '20px', background: 'rgba(255,255,255,0.58)', border: '1px solid rgba(139,92,40,0.14)' }
 
 export default PlayerDashboardScreen
