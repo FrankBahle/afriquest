@@ -41,61 +41,60 @@ const backgroundMedia = [
 ]
 
 function App() {
- const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
-const [isFading, setIsFading] = useState(false)
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
+  const [isFading, setIsFading] = useState(false)
+  const [authMode, setAuthMode] = useState('login')
+  const [showAuthModal, setShowAuthModal] = useState(false)
 
-const currentMedia = backgroundMedia[currentMediaIndex]
-const [authMode, setAuthMode] = useState('login')
-const [showAuthModal, setShowAuthModal] = useState(false)
-const { currentUser, logout } = useAuth()
+  const currentMedia = backgroundMedia[currentMediaIndex]
+  const { currentUser, logout } = useAuth()
 
-async function handleAuthClick() {
-  if (currentUser) {
-    await logout()
-  } else {
-    setAuthMode('login')
-    setShowAuthModal(true)
-  }
-}
-
-function handleStartQuest() {
-  if (!currentUser) {
-    setAuthMode('register')
-    setShowAuthModal(true)
-    return
+  async function handleAuthClick() {
+    if (currentUser) {
+      await logout()
+    } else {
+      setAuthMode('login')
+      setShowAuthModal(true)
+    }
   }
 
-  alert('Game dashboard coming next.')
-}
+  function handleStartQuest() {
+    if (!currentUser) {
+      setAuthMode('register')
+      setShowAuthModal(true)
+      return
+    }
 
-useEffect(() => {
-  let timeout
-
-  const interval = setInterval(() => {
-    setIsFading(true)
-
-    timeout = setTimeout(() => {
-      setCurrentMediaIndex((previousIndex) =>
-        previousIndex === backgroundMedia.length - 1 ? 0 : previousIndex + 1
-      )
-
-      setIsFading(false)
-    }, 700)
-  }, 7000)
-
-  return () => {
-    clearInterval(interval)
-    clearTimeout(timeout)
+    alert('Game dashboard coming next.')
   }
-}, [])
+
+  useEffect(() => {
+    let timeout
+
+    const interval = setInterval(() => {
+      setIsFading(true)
+
+      timeout = setTimeout(() => {
+        setCurrentMediaIndex((previousIndex) =>
+          previousIndex === backgroundMedia.length - 1 ? 0 : previousIndex + 1
+        )
+
+        setIsFading(false)
+      }, 700)
+    }, 7000)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(timeout)
+    }
+  }, [])
 
   return (
-    
     <main className="app">
       <nav className="navbar">
         <a href="/" className="brand">
           <img src={logo} alt="GRIT Lab Africa logo" />
-          <span>AfriQuest</span>
+          <span>GRIT Lab Africa</span>
         </a>
 
         <div className="navLinks">
@@ -104,328 +103,332 @@ useEffect(() => {
         </div>
 
         <div className="navActions">
-  <button onClick={handleAuthClick} className="loginButton">
-    {currentUser ? 'Logout' : 'Login'}
-  </button>
+          <button onClick={handleAuthClick} className="loginButton">
+            {currentUser ? 'Logout' : 'Login'}
+          </button>
 
-{!currentUser && (
-  <button onClick={handleStartQuest} className="startButton">
-    Start Quest
-  </button>
-)}
-</div>
+          {!currentUser && (
+            <button onClick={handleStartQuest} className="startButton">
+              Start Quest
+            </button>
+          )}
+        </div>
       </nav>
 
-{currentUser ? (
-  <GameHome currentUser={currentUser} />
-) : (
-  <>
-    <section className="heroArea">
-              <div className="heroMediaCard">
-         {currentMedia.type === 'video' ? (
-  <video
-    key={currentMedia.src}
-    className={`heroMedia ${isFading ? 'mediaFadeOut' : 'mediaFadeIn'}`}
-    src={currentMedia.src}
-    autoPlay
-    muted
-    loop
-    playsInline
-  />
-) : (
-  <img
-    key={currentMedia.src}
-    className={`heroMedia ${isFading ? 'mediaFadeOut' : 'mediaFadeIn'}`}
-    src={currentMedia.src}
-    alt="African innovation background"
-  />
-)}
+      {currentUser ? (
+        <GameHome currentUser={currentUser} />
+      ) : (
+        <>
+          <section className="heroArea" id="about">
+            <div className="heroMediaCard">
+              {currentMedia.type === 'video' ? (
+                <video
+                  key={currentMedia.src}
+                  className={`heroMedia ${
+                    isFading ? 'mediaFadeOut' : 'mediaFadeIn'
+                  }`}
+                  src={currentMedia.src}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                />
+              ) : (
+                <img
+                  key={currentMedia.src}
+                  className={`heroMedia ${
+                    isFading ? 'mediaFadeOut' : 'mediaFadeIn'
+                  }`}
+                  src={currentMedia.src}
+                  alt="African innovation background"
+                />
+              )}
 
-         <div className="heroOverlay"></div>
+              <div className="heroOverlay"></div>
 
-<div className="heroContentCard">
-  <p className="heroTag">GRIT Lab Africa AI Demo Project</p>
+              <div className="heroContentCard">
+                <p className="heroTag">GRIT Lab Africa AI Demo Project</p>
 
-  <h2
-    style={{
-      color: '#b8860b',
-      fontSize: '3.2rem',
-      lineHeight: '1.05',
-      letterSpacing: '-0.04em',
-      margin: '0 0 20px',
-      fontWeight: '800'
-    }}
-  >
-    Solving African challenges through smart technology.
-  </h2>
+                <h2
+                  style={{
+                    color: '#b8860b',
+                    fontSize: '3.2rem',
+                    lineHeight: '1.05',
+                    letterSpacing: '-0.04em',
+                    margin: '0 0 20px',
+                    fontWeight: '800'
+                  }}
+                >
+                  Solving African challenges through smart technology.
+                </h2>
 
-  <p>
-    AfriQuest is a gamified AI-powered platform inspired by GRIT Lab
-    Africa’s mission of digital skills development, youth innovation
-    and practical technology solutions. The application presents real
-    African challenges and allows users to match each problem with
-    possible AI and digital solutions.
-  </p>
+                <p>
+                  GRIT Lab Africa presents a gamified AI-powered platform
+                  inspired by digital skills development, youth innovation and
+                  practical technology solutions. The application presents real
+                  African challenges and allows users to match each problem with
+                  possible AI and digital solutions.
+                </p>
 
-  <div className="heroButtons">
-<button onClick={handleStartQuest} className="startButton">
-  Start Quest
-</button>
-    <button className="glassButton">Explore Project</button>
-  </div>
-</div>
-        </div>
-      </section>
-<section
-  id="contact"
-  style={{
-    width: 'min(1250px, calc(100vw - 48px))',
-    margin: '60px auto 90px'
-  }}
->
-  <div
-    style={{
-      width: '100%',
-      padding: '52px',
-      borderRadius: '34px',
-      background: 'rgba(255, 255, 255, 0.72)',
-      border: '1px solid rgba(139, 92, 40, 0.22)',
-      boxShadow: '0 28px 70px rgba(80, 52, 20, 0.18)',
-      backdropFilter: 'blur(18px)',
-      WebkitBackdropFilter: 'blur(18px)'
-    }}
-  >
-    <div
-      style={{
-        marginBottom: '34px'
-      }}
-    >
-     
+                <div className="heroButtons">
+                  <button onClick={handleStartQuest} className="startButton">
+                    Start Quest
+                  </button>
 
-      <h3
-        style={{
-  margin: '0 0 16px',
-  color: '#5c3512',
-  fontSize: '3rem',
-  lineHeight: '0.95',
-  letterSpacing: '-0.065em',
-  fontWeight: '650'
-}}
-      >
-        Contact us
-      </h3>
+                  <button className="glassButton">Explore Project</button>
+                </div>
+              </div>
+            </div>
+          </section>
 
-      <h3
-        style={{
-          margin: '0',
-          maxWidth: '760px',
-          color: '#4b3a2a',
-          fontSize: '1.18rem',
-          lineHeight: '1.7',
-          fontWeight: '500'
-        }}
-      >
-        AfriQuest is AI project connected to GRIT Lab Africa’s innovation
-        environment, exploring how AI, digital skills and gamified learning can
-        support real African problem-solving.
-      </h3>
-    </div>
-
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        gap: '18px'
-      }}
-    >
-      <div
-        style={{
-          minHeight: '190px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          borderRadius: '26px',
-          background: 'rgba(255, 255, 255, 0.62)',
-          border: '1px solid rgba(139, 92, 40, 0.16)',
-          boxShadow: '0 16px 36px rgba(80, 52, 20, 0.1)'
-        }}
-      >
-        <div>
-          <p
+          <section
+            id="contact"
             style={{
-              margin: '0 0 10px',
-              color: '#9a6a22',
-              fontSize: '0.74rem',
-              fontWeight: '850',
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase'
+              width: 'min(1250px, calc(100vw - 48px))',
+              margin: '60px auto 90px'
             }}
           >
-            Email
-          </p>
+            <div
+              style={{
+                width: '100%',
+                padding: '52px',
+                borderRadius: '34px',
+                background: 'rgba(255, 255, 255, 0.72)',
+                border: '1px solid rgba(139, 92, 40, 0.22)',
+                boxShadow: '0 28px 70px rgba(80, 52, 20, 0.18)',
+                backdropFilter: 'blur(18px)',
+                WebkitBackdropFilter: 'blur(18px)'
+              }}
+            >
+              <div
+                style={{
+                  marginBottom: '34px'
+                }}
+              >
+                <h3
+                  style={{
+                    margin: '0 0 16px',
+                    color: '#5c3512',
+                    fontSize: '3rem',
+                    lineHeight: '0.95',
+                    letterSpacing: '-0.065em',
+                    fontWeight: '650'
+                  }}
+                >
+                  Contact us
+                </h3>
 
-          <h4
-            style={{
-              margin: '0',
-              color: '#3b2817',
-              fontSize: '1.45rem',
-              lineHeight: '1.1',
-              letterSpacing: '-0.04em'
-            }}
-          >
-            General Enquiries
-          </h4>
-        </div>
+                <h3
+                  style={{
+                    margin: '0',
+                    maxWidth: '760px',
+                    color: '#4b3a2a',
+                    fontSize: '1.18rem',
+                    lineHeight: '1.7',
+                    fontWeight: '500'
+                  }}
+                >
+                  This application is connected to GRIT Lab Africa’s innovation
+                  environment, exploring how AI, digital skills and gamified
+                  learning can support real African problem-solving.
+                </h3>
+              </div>
 
-        <a
-          href="mailto:info@gritlabafrica.org"
-          style={{
-            color: '#5c3512',
-            fontWeight: '800',
-            fontSize: '1rem'
-          }}
-        >
-          info@gritlabafrica.org
-        </a>
-      </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: '18px'
+                }}
+              >
+                <div
+                  style={{
+                    minHeight: '190px',
+                    padding: '24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    borderRadius: '26px',
+                    background: 'rgba(255, 255, 255, 0.62)',
+                    border: '1px solid rgba(139, 92, 40, 0.16)',
+                    boxShadow: '0 16px 36px rgba(80, 52, 20, 0.1)'
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        margin: '0 0 10px',
+                        color: '#9a6a22',
+                        fontSize: '0.74rem',
+                        fontWeight: '850',
+                        letterSpacing: '0.14em',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Email
+                    </p>
 
-      <a
-        href="https://gritlabafrica.org/"
-        target="_blank"
-        rel="noreferrer"
-        style={{
-          minHeight: '190px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          borderRadius: '26px',
-          background: 'linear-gradient(135deg, rgba(92, 53, 18, 0.95), rgba(154, 106, 34, 0.9))',
-          color: '#fff8eb',
-          textDecoration: 'none',
-          boxShadow: '0 18px 42px rgba(92, 53, 18, 0.22)'
-        }}
-      >
-        <div>
-          <p
-            style={{
-              margin: '0 0 10px',
-              color: '#f4d28a',
-              fontSize: '0.74rem',
-              fontWeight: '850',
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase'
-            }}
-          >
-            Official Website
-          </p>
+                    <h4
+                      style={{
+                        margin: '0',
+                        color: '#3b2817',
+                        fontSize: '1.45rem',
+                        lineHeight: '1.1',
+                        letterSpacing: '-0.04em'
+                      }}
+                    >
+                      General Enquiries
+                    </h4>
+                  </div>
 
-          <h4
-            style={{
-              margin: '0',
-              color: '#fff8eb',
-              fontSize: '1.45rem',
-              lineHeight: '1.1',
-              letterSpacing: '-0.04em'
-            }}
-          >
-            Visit GRIT Lab Africa
-          </h4>
-        </div>
+                  <a
+                    href="mailto:info@gritlabafrica.org"
+                    style={{
+                      color: '#5c3512',
+                      fontWeight: '800',
+                      fontSize: '1rem'
+                    }}
+                  >
+                    info@gritlabafrica.org
+                  </a>
+                </div>
 
-        <p
-          style={{
-            margin: '18px 0 0',
-            color: 'rgba(255, 248, 235, 0.82)',
-            lineHeight: '1.55',
-            fontSize: '0.95rem'
-          }}
-        >
-          View GRIT Lab Africa’s programmes, mission, leadership and innovation
-          work.
-        </p>
-      </a>
+                <a
+                  href="https://gritlabafrica.org/"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    minHeight: '190px',
+                    padding: '24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    borderRadius: '26px',
+                    background:
+                      'linear-gradient(135deg, rgba(92, 53, 18, 0.95), rgba(154, 106, 34, 0.9))',
+                    color: '#fff8eb',
+                    textDecoration: 'none',
+                    boxShadow: '0 18px 42px rgba(92, 53, 18, 0.22)'
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        margin: '0 0 10px',
+                        color: '#f4d28a',
+                        fontSize: '0.74rem',
+                        fontWeight: '850',
+                        letterSpacing: '0.14em',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Official Website
+                    </p>
 
-      <a
-        href="https://showroom.gritlabafrica.org/"
-        target="_blank"
-        rel="noreferrer"
-        style={{
-          minHeight: '190px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          borderRadius: '26px',
-          background: 'rgba(255, 255, 255, 0.62)',
-          border: '1px solid rgba(139, 92, 40, 0.16)',
-          color: '#3b2817',
-          textDecoration: 'none',
-          boxShadow: '0 16px 36px rgba(80, 52, 20, 0.1)'
-        }}
-      >
-        <div>
-          <p
-            style={{
-              margin: '0 0 10px',
-              color: '#9a6a22',
-              fontSize: '0.74rem',
-              fontWeight: '850',
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase'
-            }}
-          >
-            Project Showroom
-          </p>
+                    <h4
+                      style={{
+                        margin: '0',
+                        color: '#fff8eb',
+                        fontSize: '1.45rem',
+                        lineHeight: '1.1',
+                        letterSpacing: '-0.04em'
+                      }}
+                    >
+                      Visit GRIT Lab Africa
+                    </h4>
+                  </div>
 
-          <h4
-            style={{
-              margin: '0',
-              color: '#3b2817',
-              fontSize: '1.45rem',
-              lineHeight: '1.1',
-              letterSpacing: '-0.04em'
-            }}
-          >
-            Explore the Showroom
-          </h4>
-        </div>
+                  <p
+                    style={{
+                      margin: '18px 0 0',
+                      color: 'rgba(255, 248, 235, 0.82)',
+                      lineHeight: '1.55',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    View GRIT Lab Africa’s programmes, mission, leadership and
+                    innovation work.
+                  </p>
+                </a>
 
-        <p
-          style={{
-            margin: '18px 0 0',
-            color: '#5c4632',
-            lineHeight: '1.55',
-            fontSize: '0.95rem'
-          }}
-        >
-          Browse GRIT Lab Africa’s project showcase and real-world technology
-          solutions.
-        </p>
-      </a>
+                <a
+                  href="https://showroom.gritlabafrica.org/"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    minHeight: '190px',
+                    padding: '24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    borderRadius: '26px',
+                    background: 'rgba(255, 255, 255, 0.62)',
+                    border: '1px solid rgba(139, 92, 40, 0.16)',
+                    color: '#3b2817',
+                    textDecoration: 'none',
+                    boxShadow: '0 16px 36px rgba(80, 52, 20, 0.1)'
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        margin: '0 0 10px',
+                        color: '#9a6a22',
+                        fontSize: '0.74rem',
+                        fontWeight: '850',
+                        letterSpacing: '0.14em',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      Project Showroom
+                    </p>
 
-      
+                    <h4
+                      style={{
+                        margin: '0',
+                        color: '#3b2817',
+                        fontSize: '1.45rem',
+                        lineHeight: '1.1',
+                        letterSpacing: '-0.04em'
+                      }}
+                    >
+                      Explore the Showroom
+                    </h4>
+                  </div>
 
-        
-    </div>
-  </div>
-</section>
-  </>
-)}
+                  <p
+                    style={{
+                      margin: '18px 0 0',
+                      color: '#5c4632',
+                      lineHeight: '1.55',
+                      fontSize: '0.95rem'
+                    }}
+                  >
+                    Browse GRIT Lab Africa’s project showcase and real-world
+                    technology solutions.
+                  </p>
+                </a>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
       <footer className="footer">
         <p>
-          <strong>AfriQuest</strong> © 2026
+          <strong>GRIT Lab Africa</strong> © 2026
         </p>
 
         <p>Powered by GRIT Lab Africa</p>
       </footer>
-{showAuthModal && (
-  <AuthModal
-    initialMode={authMode}
-    onClose={() => setShowAuthModal(false)}
-  />
-)}    </main>
+
+      {showAuthModal && (
+        <AuthModal
+          initialMode={authMode}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
+    </main>
   )
 }
 

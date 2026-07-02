@@ -8,6 +8,8 @@ const RUBRIC_LIMITS = {
   ethical_and_responsible_use: 10
 }
 
+const RUBRIC_KEYS = Object.keys(RUBRIC_LIMITS)
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -25,11 +27,54 @@ function cleanJsonResponse(content) {
     .trim()
 }
 
-function toNumber(value, fallback = 0) {
-  const number = Number(value)
+function extractJsonObject(content) {
+  const cleaned = cleanJsonResponse(content)
 
-  if (Number.isFinite(number)) {
-    return number
+  if (!cleaned) {
+    return ''
+  }
+
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace = cleaned.lastIndexOf('}')
+
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    return cleaned
+  }
+
+  return cleaned.slice(firstBrace, lastBrace + 1)
+}
+
+function toNumber(value, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const cleaned = value.replace('%', '').trim()
+    const number = Number(cleaned)
+
+    if (Number.isFinite(number)) {
+      return number
+    }
+  }
+
+  if (value && typeof value === 'object') {
+    const possibleNestedValues = [
+      value.score,
+      value.value,
+      value.mark,
+      value.marks,
+      value.points,
+      value.total
+    ]
+
+    for (const nestedValue of possibleNestedValues) {
+      const number = toNumber(nestedValue, Number.NaN)
+
+      if (Number.isFinite(number)) {
+        return number
+      }
+    }
   }
 
   return fallback
@@ -54,14 +99,16 @@ function pickNumber(source, possibleKeys, fallback = 0) {
 }
 
 function normaliseSubScores(subScores = {}) {
-  const normalised = {
+  return {
     ai_card_relevance: clamp(
       Math.round(
         pickNumber(subScores, [
           'ai_card_relevance',
           'aiCardRelevance',
           'AI Card Relevance',
-          'AI card relevance'
+          'AI card relevance',
+          'ai card relevance',
+          'relevance'
         ])
       ),
       0,
@@ -74,7 +121,8 @@ function normaliseSubScores(subScores = {}) {
           'combination_strength',
           'combinationStrength',
           'Combination Strength',
-          'combination strength'
+          'combination strength',
+          'combination'
         ])
       ),
       0,
@@ -87,7 +135,9 @@ function normaliseSubScores(subScores = {}) {
           'practical_feasibility',
           'practicalFeasibility',
           'Practical Feasibility',
-          'practical feasibility'
+          'practical feasibility',
+          'feasibility',
+          'practicality'
         ])
       ),
       0,
@@ -100,7 +150,10 @@ function normaliseSubScores(subScores = {}) {
           'african_context_and_feasibility',
           'africanContextAndFeasibility',
           'African Context and Feasibility',
-          'african context and feasibility'
+          'african context and feasibility',
+          'african_context',
+          'africanContext',
+          'african context'
         ])
       ),
       0,
@@ -113,7 +166,8 @@ function normaliseSubScores(subScores = {}) {
           'sdg_alignment',
           'sdgAlignment',
           'SDG Alignment',
-          'sdg alignment'
+          'sdg alignment',
+          'sdg'
         ])
       ),
       0,
@@ -126,7 +180,9 @@ function normaliseSubScores(subScores = {}) {
           'creativity_and_innovation',
           'creativityAndInnovation',
           'Creativity and Innovation',
-          'creativity and innovation'
+          'creativity and innovation',
+          'creativity',
+          'innovation'
         ])
       ),
       0,
@@ -139,56 +195,152 @@ function normaliseSubScores(subScores = {}) {
           'ethical_and_responsible_use',
           'ethicalAndResponsibleUse',
           'Ethical and Responsible Use',
-          'ethical and responsible use'
+          'ethical and responsible use',
+          'ethics',
+          'ethical_use',
+          'responsible_use'
         ])
       ),
       0,
       RUBRIC_LIMITS.ethical_and_responsible_use
     )
   }
-
-  return normalised
 }
 
 function sumSubScores(subScores) {
   return Object.values(subScores).reduce((total, score) => total + score, 0)
 }
 
-function normaliseEvaluation(parsed) {
-  const subScores = normaliseSubScores(parsed?.sub_scores || parsed?.subScores)
+function distributeTotalIntoSubScores(totalScore) {
+  const safeTotal = clamp(Math.round(toNumber(totalScore, 1)), 1, 100)
 
-  let totalScore = Math.round(
+  const subScores = {}
+
+  RUBRIC_KEYS.forEach((key) => {
+    subScores[key] = Math.floor((safeTotal * RUBRIC_LIMITS[key]) / 100)
+  })
+
+  let difference = safeTotal - sumSubScores(subScores)
+
+  while (difference > 0) {
+    for (const key of RUBRIC_KEYS) {
+      if (difference <= 0) break
+
+      if (subScores[key] < RUBRIC_LIMITS[key]) {
+        subScores[key] += 1
+        difference -= 1
+      }
+    }
+  }
+
+  while (difference < 0) {
+    for (const key of RUBRIC_KEYS) {
+      if (difference >= 0) break
+
+      if (subScores[key] > 0) {
+        subScores[key] -= 1
+        difference += 1
+      }
+    }
+  }
+
+  return subScores
+}
+
+function isVeryWeakExplanation(text) {
+  const cleaned = String(text || '').trim().toLowerCase()
+
+  const weakAnswers = [
+    'i dont know',
+    "i don't know",
+    'idk',
+    'not sure',
+    'no idea',
+    'i am not sure',
+    "i'm not sure"
+  ]
+
+  if (weakAnswers.includes(cleaned)) {
+    return true
+  }
+
+  return cleaned.split(/\s+/).filter(Boolean).length <= 3
+}
+
+function getFeedback(parsed, userExplanation) {
+  const weak = isVeryWeakExplanation(userExplanation)
+
+  let overall =
+    parsed?.feedback?.overall ||
+    parsed?.overall_feedback ||
+    parsed?.overallFeedback ||
+    ''
+
+  let improvement =
+    parsed?.feedback?.improvement ||
+    parsed?.improvement ||
+    parsed?.improvement_suggestion ||
+    ''
+
+  if (!overall) {
+    overall = weak
+      ? 'Your answer is too short to show a clear solution, so it receives a low score. You still get feedback so you can try again.'
+      : 'Your idea has been reviewed. The score shows how realistic, practical, ethical and useful the solution is.'
+  }
+
+  if (!improvement) {
+    improvement = weak
+      ? 'Try explaining which AI card you chose, who it helps, and how it would work in a real African community.'
+      : 'Improve your answer by explaining who will use the solution, how it will work, what resources are needed, and why it fits the African context.'
+  }
+
+  return {
+    overall,
+    improvement
+  }
+}
+
+function normaliseEvaluation(parsed, userExplanation) {
+  const rawSubScores = parsed?.sub_scores || parsed?.subScores || {}
+  let subScores = normaliseSubScores(rawSubScores)
+  let subScoreTotal = sumSubScores(subScores)
+
+  let providedTotal = Math.round(
     toNumber(
       parsed?.total_score ??
         parsed?.totalScore ??
         parsed?.score ??
-        parsed?.GLA_coin_earned,
-      sumSubScores(subScores)
+        parsed?.GLA_coin_earned ??
+        parsed?.glaCoinEarned,
+      0
     )
   )
 
-  if (totalScore <= 0) {
-    totalScore = sumSubScores(subScores)
+  providedTotal = clamp(providedTotal, 0, 100)
+
+  if (subScoreTotal <= 0 && providedTotal > 0) {
+    subScores = distributeTotalIntoSubScores(providedTotal)
+    subScoreTotal = sumSubScores(subScores)
   }
 
-  totalScore = clamp(totalScore, 1, 100)
+  if (subScoreTotal <= 0) {
+    const fallbackScore = isVeryWeakExplanation(userExplanation) ? 7 : 35
+    subScores = distributeTotalIntoSubScores(fallbackScore)
+    subScoreTotal = sumSubScores(subScores)
+  }
+
+  let totalScore = clamp(subScoreTotal, 1, 100)
+
+  if (isVeryWeakExplanation(userExplanation)) {
+    totalScore = clamp(totalScore, 1, 15)
+    subScores = distributeTotalIntoSubScores(totalScore)
+  }
 
   return {
     total_score: totalScore,
     GLA_coin_earned: totalScore,
     sub_scores: subScores,
-    feedback: {
-      overall:
-        parsed?.feedback?.overall ||
-        parsed?.overall_feedback ||
-        parsed?.overallFeedback ||
-        'Your idea has been reviewed. The score shows how realistic, practical, ethical and useful the solution is.',
-      improvement:
-        parsed?.feedback?.improvement ||
-        parsed?.improvement ||
-        parsed?.improvement_suggestion ||
-        'Improve your answer by explaining who will use the solution, how it will work, what resources are needed, and why it fits the African context.'
-    }
+    feedback: getFeedback(parsed, userExplanation)
   }
 }
 
@@ -205,7 +357,7 @@ async function callDeepSeek({ apiKey, model, prompt }) {
         {
           role: 'system',
           content:
-            'You are the AfriQuest DeepSeek evaluator. You must return valid JSON only. You rate African AI solution ideas from 1 to 100 based on realism, practicality, SDG value, ethics and usefulness. Never return markdown.'
+            'You are the GRIT Lab Africa AI card game evaluator. Return JSON only. Do not return markdown. The response must be valid JSON.'
         },
         {
           role: 'user',
@@ -219,11 +371,21 @@ async function callDeepSeek({ apiKey, model, prompt }) {
         type: 'disabled'
       },
       temperature: 0.2,
-      max_tokens: 900
+      max_tokens: 1000
     })
   })
 
-  const data = await response.json().catch(() => ({}))
+  const rawText = await response.text()
+
+  let data = {}
+
+  try {
+    data = JSON.parse(rawText)
+  } catch {
+    data = {
+      rawText
+    }
+  }
 
   return {
     response,
@@ -240,7 +402,6 @@ export async function handler(event) {
 
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY
-
     const requestedModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
 
     const model = ['deepseek-v4-flash', 'deepseek-v4-pro'].includes(
@@ -251,7 +412,8 @@ export async function handler(event) {
 
     if (!apiKey) {
       return jsonResponse(500, {
-        error: 'DeepSeek API key has not been configured.'
+        error:
+          'DeepSeek API key has not been configured. Add DEEPSEEK_API_KEY in Netlify environment variables.'
       })
     }
 
@@ -259,7 +421,9 @@ export async function handler(event) {
 
     const problemCard = body.problemCard
     const selectedSolution = body.selectedSolution
-    const selectedAiCards = body.selectedAiCards || []
+    const selectedAiCards = Array.isArray(body.selectedAiCards)
+      ? body.selectedAiCards.slice(0, 3)
+      : []
     const userExplanation = String(body.userExplanation || '').trim()
 
     if (!problemCard) {
@@ -280,13 +444,23 @@ export async function handler(event) {
       })
     }
 
+    const wordCount = userExplanation.split(/\s+/).filter(Boolean).length
+
+    if (wordCount > 100) {
+      return jsonResponse(400, {
+        error: 'Your explanation must be 100 words or less.'
+      })
+    }
+
     const selectedAiCardsText =
       selectedAiCards.length > 0
         ? selectedAiCards
             .map((card, index) => {
               return `${index + 1}. ${card.title}
 Type: ${card.type}
-What it can do: ${card.canDo}`
+What it can do: ${card.canDo}
+Examples: ${(card.examples || []).join(', ')}
+Card question: ${card.question}`
             })
             .join('\n\n')
         : `Title: ${selectedSolution.title}
@@ -295,20 +469,20 @@ Description: ${selectedSolution.description}`
     const prompt = `
 Return valid JSON only.
 
-You are evaluating a player's AfriQuest solution.
+You are evaluating a player's GRIT Lab Africa AI/SDG card game solution.
 
-The player is not choosing a single correct answer.
-The player is using AI cards to design a realistic solution for an African problem.
+The player is not answering a correct-or-wrong quiz.
+The player is designing a realistic AI solution for an African problem card.
 
-IMPORTANT RULES:
-- Rate the idea from 1 to 100.
-- Do not return 0 for normal weak answers.
-- If the player says "I don't know", "not sure", or gives a very weak explanation, still score it between 1 and 15 and give helpful feedback.
-- Do not say "I cannot evaluate this".
-- Do not judge the answer as simply correct or wrong.
-- Judge how realistic, practical, useful, ethical and African-context-aware the idea is.
-- If the idea is unsafe, harmful, discriminatory, or gives dangerous advice, give a very low score and explain the safety problem.
-- For health, mental health, GBV, crime, substance abuse or emergency topics, encourage safe support, privacy, human oversight and appropriate services.
+IMPORTANT SCORING RULES:
+- Give a score from 1 to 100.
+- Never return 0.
+- The score becomes the player's GLA coin earned.
+- If the player says "I don't know", "not sure", "idk", or gives a very weak answer, give a low score between 1 and 15, but still give helpful feedback.
+- Do not say you cannot evaluate the answer.
+- Judge realism, practicality, African context, SDG alignment, creativity, and ethics.
+- If the idea is unsafe, harmful, discriminatory, privacy-invasive, or dangerous, give a very low score and explain the safety problem.
+- For health, mental health, GBV, crime, substance abuse, or emergency topics, reward privacy, human oversight, safe referrals, and appropriate support services.
 
 PROBLEM CARD:
 Title: ${problemCard.title}
@@ -325,16 +499,17 @@ PLAYER EXPLANATION:
 "${userExplanation}"
 
 SCORING RUBRIC:
-1. AI card relevance: 20 marks
-2. Combination strength: 15 marks
-3. Practical feasibility: 15 marks
-4. African context and feasibility: 15 marks
-5. SDG alignment: 15 marks
-6. Creativity and innovation: 10 marks
-7. Ethical and responsible use: 10 marks
+1. ai_card_relevance: 20 marks
+2. combination_strength: 15 marks
+3. practical_feasibility: 15 marks
+4. african_context_and_feasibility: 15 marks
+5. sdg_alignment: 15 marks
+6. creativity_and_innovation: 10 marks
+7. ethical_and_responsible_use: 10 marks
 
-The total score must be the sum of the sub-scores.
-The total score must be between 1 and 100.
+The total_score must equal the sum of the sub_scores.
+The total_score must be between 1 and 100.
+GLA_coin_earned must equal total_score.
 
 Return exactly this JSON shape:
 
@@ -351,14 +526,14 @@ Return exactly this JSON shape:
     "ethical_and_responsible_use": 6
   },
   "feedback": {
-    "overall": "Short feedback explaining why this score was given.",
+    "overall": "Short helpful feedback explaining why this score was given.",
     "improvement": "One clear way the player can improve the solution."
   }
 }
 `
 
-    let deepseekData = null
     let content = ''
+    let deepseekError = ''
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const { response, data } = await callDeepSeek({
@@ -367,17 +542,16 @@ Return exactly this JSON shape:
         prompt
       })
 
-      deepseekData = data
-
       if (!response.ok) {
-        return jsonResponse(response.status, {
-          error:
-            data?.error?.message ||
-            'DeepSeek could not score the explanation right now.'
-        })
+        deepseekError =
+          data?.error?.message ||
+          data?.message ||
+          'DeepSeek could not score the explanation right now.'
+
+        continue
       }
 
-      content = cleanJsonResponse(data?.choices?.[0]?.message?.content)
+      content = extractJsonObject(data?.choices?.[0]?.message?.content)
 
       if (content) {
         break
@@ -387,6 +561,7 @@ Return exactly this JSON shape:
     if (!content) {
       return jsonResponse(502, {
         error:
+          deepseekError ||
           'DeepSeek returned an empty response. Please try again in a few seconds.'
       })
     }
@@ -402,7 +577,7 @@ Return exactly this JSON shape:
       })
     }
 
-    const normalised = normaliseEvaluation(parsed)
+    const normalised = normaliseEvaluation(parsed, userExplanation)
 
     return jsonResponse(200, normalised)
   } catch (err) {

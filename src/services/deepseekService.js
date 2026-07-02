@@ -20,7 +20,15 @@ export async function gradeExplanation({
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.error || 'Could not score explanation.')
+    throw new Error(
+      data.error ||
+        data.message ||
+        'DeepSeek could not score the explanation right now.'
+    )
+  }
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('DeepSeek returned an empty result.')
   }
 
   return data

@@ -3,6 +3,7 @@ import { gradeExplanation } from '../services/deepseekService'
 import problemCards from '../assets/json/grit_lab_africa_problem_cards.json'
 import card1 from '../assets/images/card1.jpeg'
 import card2 from '../assets/images/card2.jpeg'
+import PlayerDashboardScreen from './game/PlayerDashboardScreen'
 
 const aiCards = [
   {
@@ -247,6 +248,53 @@ const aiCards = [
   }
 ]
 
+const rubricRows = [
+  {
+    key: 'ai_card_relevance',
+    label: 'AI Card Relevance',
+    max: 20,
+    meaning: 'Checks if the selected AI cards fit the problem.'
+  },
+  {
+    key: 'combination_strength',
+    label: 'Combination Strength',
+    max: 15,
+    meaning: 'Checks if the selected AI cards work well together.'
+  },
+  {
+    key: 'practical_feasibility',
+    label: 'Practical Feasibility',
+    max: 15,
+    meaning:
+      'Checks if the idea can realistically work with available tools and resources.'
+  },
+  {
+    key: 'african_context_and_feasibility',
+    label: 'African Context and Feasibility',
+    max: 15,
+    meaning:
+      'Checks if the idea considers cost, access, language, infrastructure and African realities.'
+  },
+  {
+    key: 'sdg_alignment',
+    label: 'SDG Alignment',
+    max: 15,
+    meaning: 'Checks if the idea supports the linked SDG goals.'
+  },
+  {
+    key: 'creativity_and_innovation',
+    label: 'Creativity and Innovation',
+    max: 10,
+    meaning: 'Checks if the idea is useful, original and innovative.'
+  },
+  {
+    key: 'ethical_and_responsible_use',
+    label: 'Ethical and Responsible Use',
+    max: 10,
+    meaning: 'Checks privacy, fairness, safety, inclusion and responsible AI use.'
+  }
+]
+
 function createRound(cards) {
   if (!cards.length) {
     return {
@@ -265,28 +313,42 @@ function countWords(text) {
   return text.trim().split(/\s+/).filter(Boolean).length
 }
 
+function toSafeNumber(value, fallback = 0) {
+  const number = Number(value)
+
+  if (Number.isFinite(number)) {
+    return number
+  }
+
+  return fallback
+}
+
 function getAiResultScore(result) {
   if (!result) return 0
 
-  if (typeof result.total_score === 'number') return result.total_score
-  if (typeof result.totalScore === 'number') return result.totalScore
-  if (typeof result.score === 'number') return result.score
-  if (typeof result.GLA_coin_earned === 'number') return result.GLA_coin_earned
-  if (typeof result.grade === 'number') return Math.round(result.grade * 10)
+  if (result.total_score !== undefined) return toSafeNumber(result.total_score)
+  if (result.totalScore !== undefined) return toSafeNumber(result.totalScore)
+  if (result.score !== undefined) return toSafeNumber(result.score)
+  if (result.GLA_coin_earned !== undefined) return toSafeNumber(result.GLA_coin_earned)
+  if (result.grade !== undefined) return Math.round(toSafeNumber(result.grade) * 10)
 
   return 0
 }
 
 function normaliseAiResult(result) {
-  const totalScore = Math.max(0, Math.min(100, getAiResultScore(result)))
+  const totalScore = Math.max(
+    0,
+    Math.min(100, Math.round(getAiResultScore(result)))
+  )
 
   return {
     totalScore,
-    glaCoinEarned:
+    glaCoinEarned: toSafeNumber(
       result?.GLA_coin_earned ||
-      result?.glaCoinEarned ||
-      result?.gla_coin_earned ||
-      totalScore,
+        result?.glaCoinEarned ||
+        result?.gla_coin_earned ||
+        totalScore
+    ),
     overallFeedback:
       result?.feedback?.overall ||
       result?.overallFeedback ||
@@ -296,7 +358,7 @@ function normaliseAiResult(result) {
       result?.feedback?.improvement ||
       result?.improvement ||
       'Make the explanation more specific about how the solution will work in real life.',
-    subScores: result?.sub_scores || result?.subScores || null
+    subScores: result?.sub_scores || result?.subScores || {}
   }
 }
 
@@ -322,6 +384,7 @@ function GameHome({ currentUser }) {
   const [aiError, setAiError] = useState('')
   const [attempts, setAttempts] = useState([])
   const [glaCoinBalance, setGlaCoinBalance] = useState(0)
+  const [coinTransactions, setCoinTransactions] = useState([])
   const [hintMessage, setHintMessage] = useState('')
   const [showHintConfirm, setShowHintConfirm] = useState(false)
   const [isChanging, setIsChanging] = useState(false)
@@ -373,6 +436,65 @@ function GameHome({ currentUser }) {
   const certificateUnlocked = completedProblems >= 10 && averageScore >= 75
   const certificationProgress = Math.min(10, completedProblems)
 
+  const attemptStatsByProblem = useMemo(() => {
+    const stats = {}
+
+    attempts.forEach((attempt) => {
+      if (!stats[attempt.problemId]) {
+        stats[attempt.problemId] = {
+          problemId: attempt.problemId,
+          problemTitle: attempt.problemTitle,
+          first: attempt,
+          latest: attempt,
+          best: attempt,
+          count: 1
+        }
+
+        return
+      }
+
+      const currentStats = stats[attempt.problemId]
+      currentStats.latest = attempt
+      currentStats.count += 1
+
+      if (attempt.totalScore > currentStats.best.totalScore) {
+        currentStats.best = attempt
+      }
+    })
+
+    return stats
+  }, [attempts])
+
+  const latestAttempt = attempts.length > 0 ? attempts[attempts.length - 1] : null
+
+  const currentProblemAttemptStats = round.card
+    ? attemptStatsByProblem[round.card.id] || null
+    : null
+
+  const latestAttemptProblemStats = latestAttempt
+    ? attemptStatsByProblem[latestAttempt.problemId] || null
+    : null
+
+  const bestScoringProblems = useMemo(() => {
+    return Object.values(attemptStatsByProblem)
+      .map((stats) => ({
+        problemId: stats.problemId,
+        problemTitle: stats.problemTitle,
+        bestScore: stats.best.totalScore,
+        bestAttempt: stats.best
+      }))
+      .sort((a, b) => b.bestScore - a.bestScore)
+      .slice(0, 5)
+  }, [attemptStatsByProblem])
+
+  const totalGlaCoinEarned = coinTransactions
+    .filter((transaction) => transaction.type === 'earned')
+    .reduce((total, transaction) => total + transaction.amount, 0)
+
+  const glaCoinSpentOnHints = coinTransactions
+    .filter((transaction) => transaction.type === 'spent')
+    .reduce((total, transaction) => total + transaction.amount, 0)
+
   function startGame() {
     const stack = cards.filter((card) => selectedProblemIds.includes(card.id))
 
@@ -399,13 +521,24 @@ function GameHome({ currentUser }) {
   }
 
   function handleNextRound() {
+    if (activeProblemStack.length < 10) {
+      setScreen('select')
+      return
+    }
+
     setIsChanging(true)
 
     setTimeout(() => {
       setRound(createRound(activeProblemStack))
       resetRound()
+      setScreen('play')
       setIsChanging(false)
     }, 400)
+  }
+
+  function handleRetryCurrentProblem() {
+    resetRound()
+    setScreen('play')
   }
 
   function toggleProblemCard(cardId) {
@@ -469,12 +602,34 @@ function GameHome({ currentUser }) {
   }
 
   async function submitExplanation() {
-    if (
-      selectedAiCards.length === 0 ||
-      !userExplanation.trim() ||
-      explanationTooLong ||
-      hasSubmittedExplanation
-    ) {
+    const trimmedExplanation = userExplanation.trim()
+
+    if (!round.card) {
+      setAiError('No problem card is active. Please start the game first.')
+      return
+    }
+
+    if (selectedAiCards.length === 0) {
+      setAiError('Please select at least one AI card before submitting.')
+      return
+    }
+
+    if (selectedAiCards.length > 3) {
+      setAiError('You can only select up to 3 AI cards.')
+      return
+    }
+
+    if (!trimmedExplanation) {
+      setAiError('Please write your explanation before submitting.')
+      return
+    }
+
+    if (explanationTooLong) {
+      setAiError('Your explanation must be 100 words or less.')
+      return
+    }
+
+    if (hasSubmittedExplanation) {
       return
     }
 
@@ -491,34 +646,53 @@ function GameHome({ currentUser }) {
       }
 
       const result = await gradeExplanation({
-  problemCard: round.card,
-  selectedSolution: selectedSolutionForCurrentBackend,
-  selectedAiCards,
-  userExplanation: userExplanation.trim()
-})
+        problemCard: round.card,
+        selectedSolution: selectedSolutionForCurrentBackend,
+        selectedAiCards,
+        userExplanation: trimmedExplanation
+      })
 
       const normalisedResult = normaliseAiResult(result)
+      const createdAt = new Date().toLocaleString()
+      const attemptNumber =
+        attempts.filter((attempt) => attempt.problemId === round.card.id).length + 1
+      const balanceAfter = glaCoinBalance + normalisedResult.glaCoinEarned
+
+      const attemptRecord = {
+        id: Date.now(),
+        problemId: round.card.id,
+        problemTitle: round.card.title,
+        selectedAiCards,
+        explanation: trimmedExplanation,
+        totalScore: normalisedResult.totalScore,
+        glaCoinEarned: normalisedResult.glaCoinEarned,
+        feedback: normalisedResult.overallFeedback,
+        improvement: normalisedResult.improvement,
+        subScores: normalisedResult.subScores,
+        attemptNumber,
+        createdAt
+      }
+
+      const coinTransaction = {
+        id: `earned-${Date.now()}`,
+        type: 'earned',
+        amount: normalisedResult.glaCoinEarned,
+        balanceAfter,
+        reason: 'DeepSeek score reward',
+        problemId: round.card.id,
+        problemTitle: round.card.title,
+        createdAt
+      }
 
       setAiResult(normalisedResult)
       setHasSubmittedExplanation(true)
-      setGlaCoinBalance((previousBalance) =>
-        previousBalance + normalisedResult.glaCoinEarned
-      )
-
-      setAttempts((previousAttempts) => [
-        ...previousAttempts,
-        {
-          id: Date.now(),
-          problemId: round.card.id,
-          problemTitle: round.card.title,
-          selectedAiCards,
-          explanation: userExplanation.trim(),
-          totalScore: normalisedResult.totalScore,
-          glaCoinEarned: normalisedResult.glaCoinEarned,
-          feedback: normalisedResult.overallFeedback,
-          createdAt: new Date().toLocaleString()
-        }
+      setGlaCoinBalance(balanceAfter)
+      setAttempts((previousAttempts) => [...previousAttempts, attemptRecord])
+      setCoinTransactions((previousTransactions) => [
+        coinTransaction,
+        ...previousTransactions
       ])
+      setScreen('score')
     } catch (err) {
       setAiError(err.message || 'DeepSeek could not score the explanation.')
     } finally {
@@ -533,28 +707,43 @@ function GameHome({ currentUser }) {
       return
     }
 
-    setGlaCoinBalance((previousBalance) => previousBalance - 20)
+    const createdAt = new Date().toLocaleString()
+    const balanceAfter = glaCoinBalance - 20
+
+    setGlaCoinBalance(balanceAfter)
+
+    setCoinTransactions((previousTransactions) => [
+      {
+        id: `spent-${Date.now()}`,
+        type: 'spent',
+        amount: 20,
+        balanceAfter,
+        reason: 'Hint request',
+        problemId: round.card?.id || null,
+        problemTitle: round.card?.title || 'No active problem',
+        createdAt
+      },
+      ...previousTransactions
+    ])
+
     setHintMessage(generateBasicHint(round.card))
     setShowHintConfirm(false)
   }
 
   function renderTopNavigation() {
+    const navItems = [
+      ['intro', 'Game Guide'],
+      ['select', 'Problem Selection'],
+      ['play', 'Play Game'],
+      ['score', 'Scoring'],
+      ['dashboard', 'Dashboard'],
+      ['coins', 'GLA Coin'],
+      ['certificate', 'Certificate']
+    ]
+
     return (
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          flexWrap: 'wrap',
-          marginBottom: '24px'
-        }}
-      >
-        {[
-          ['intro', 'Game Guide'],
-          ['select', 'Problem Selection'],
-          ['play', 'Play Game'],
-          ['dashboard', 'Dashboard'],
-          ['certificate', 'Certificate']
-        ].map(([value, label]) => (
+      <div style={topNavStyle}>
+        {navItems.map(([value, label]) => (
           <button
             key={value}
             onClick={() => {
@@ -563,19 +752,20 @@ function GameHome({ currentUser }) {
                 return
               }
 
+              if (value === 'score' && !latestAttempt) {
+                setScreen('dashboard')
+                return
+              }
+
               setScreen(value)
             }}
             style={{
-              border: '0',
-              borderRadius: '999px',
-              padding: '11px 18px',
-              cursor: 'pointer',
+              ...topNavButtonStyle,
               background:
                 screen === value
                   ? 'linear-gradient(135deg, #9a6a22, #5c3512)'
                   : 'rgba(255, 255, 255, 0.62)',
               color: screen === value ? '#fff8eb' : '#5c3512',
-              fontWeight: '850',
               boxShadow:
                 screen === value
                   ? '0 14px 30px rgba(92, 53, 18, 0.2)'
@@ -605,16 +795,7 @@ function GameHome({ currentUser }) {
           your solution is.
         </p>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '16px',
-            margin: '28px auto 0',
-            maxWidth: '880px',
-            justifyContent: 'center'
-          }}
-        >
+        <div style={guideGridStyle}>
           {[
             {
               title: '1. Choose problems',
@@ -649,13 +830,7 @@ function GameHome({ currentUser }) {
         </div>
 
         <div style={centerButtonRowStyle}>
-          <button
-            onClick={() => setScreen('select')}
-            style={{
-              ...primaryButtonStyle,
-              marginTop: 0
-            }}
-          >
+          <button onClick={() => setScreen('select')} style={primaryButtonStyle}>
             Choose Problem Cards
           </button>
         </div>
@@ -681,14 +856,7 @@ function GameHome({ currentUser }) {
           <MetricCard title="Total Cards" value={cards.length} />
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '14px',
-            marginTop: '24px'
-          }}
-        >
+        <div style={cardGridStyle}>
           {cards.map((card) => {
             const selected = selectedProblemIds.includes(card.id)
 
@@ -697,41 +865,25 @@ function GameHome({ currentUser }) {
                 key={card.id}
                 onClick={() => toggleProblemCard(card.id)}
                 style={{
-                  padding: '18px',
-                  minHeight: '180px',
-                  borderRadius: '24px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
+                  ...problemSelectCardStyle,
                   border: selected
                     ? '2px solid rgba(154, 106, 34, 0.75)'
                     : '1px solid rgba(139, 92, 40, 0.18)',
                   background: selected
                     ? 'linear-gradient(135deg, rgba(255, 248, 235, 0.96), rgba(244, 210, 138, 0.44))'
                     : 'rgba(255, 255, 255, 0.64)',
-                  color: '#3b2817',
                   boxShadow: selected
                     ? '0 20px 42px rgba(80, 52, 20, 0.18)'
                     : '0 12px 28px rgba(80, 52, 20, 0.08)'
                 }}
               >
-                <p style={eyebrowStyle}>
-                  {selected ? 'Selected' : 'Problem Card'}
-                </p>
+                <p style={eyebrowStyle}>{selected ? 'Selected' : 'Problem Card'}</p>
 
                 <h3 style={smallCardTitleStyle}>{card.title}</h3>
 
                 <p style={smallCardTextStyle}>{card.problem}</p>
 
-                <p
-                  style={{
-                    margin: '12px 0 0',
-                    color: '#9a6a22',
-                    fontSize: '0.82rem',
-                    fontWeight: '800'
-                  }}
-                >
-                  {card.problem_type}
-                </p>
+                <p style={cardTypeStyle}>{card.problem_type}</p>
               </button>
             )
           })}
@@ -743,7 +895,6 @@ function GameHome({ currentUser }) {
             disabled={selectedProblemIds.length < 10}
             style={{
               ...primaryButtonStyle,
-              marginTop: 0,
               opacity: selectedProblemIds.length < 10 ? 0.45 : 1,
               cursor: selectedProblemIds.length < 10 ? 'default' : 'pointer'
             }}
@@ -753,14 +904,7 @@ function GameHome({ currentUser }) {
         </div>
 
         {selectedProblemIds.length < 10 && (
-          <p
-            style={{
-              ...paragraphStyle,
-              color: '#7f1d1d',
-              marginTop: '12px',
-              textAlign: 'center'
-            }}
-          >
+          <p style={warningTextStyle}>
             Select {10 - selectedProblemIds.length} more problem card(s) before
             starting.
           </p>
@@ -778,13 +922,7 @@ function GameHome({ currentUser }) {
           <h1 style={sectionTitleStyle}>Choose your problem cards first.</h1>
 
           <div style={centerButtonRowStyle}>
-            <button
-              onClick={() => setScreen('select')}
-              style={{
-                ...primaryButtonStyle,
-                marginTop: 0
-              }}
-            >
+            <button onClick={() => setScreen('select')} style={primaryButtonStyle}>
               Go to Problem Selection
             </button>
           </div>
@@ -793,32 +931,8 @@ function GameHome({ currentUser }) {
     }
 
     return (
-      <section
-        className="gameSection"
-        style={{
-          width: '100%',
-          margin: '0 auto'
-        }}
-      >
-        <div
-          className="gameShell"
-          style={{
-            minHeight: '720px',
-            padding: '34px',
-            display: 'grid',
-            gridTemplateColumns: '0.85fr 1.15fr',
-            gap: '28px',
-            alignItems: 'start',
-            borderRadius: '38px',
-            background:
-              'linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(232, 214, 170, 0.72))',
-            border: '1px solid rgba(139, 92, 40, 0.22)',
-            boxShadow: '0 30px 80px rgba(80, 52, 20, 0.2)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            overflow: 'hidden'
-          }}
-        >
+      <section className="gameSection" style={{ width: '100%', margin: '0 auto' }}>
+        <div className="gameShell" style={gameShellStyle}>
           <div
             className="gameLeft"
             style={{
@@ -836,60 +950,14 @@ function GameHome({ currentUser }) {
               DeepSeek scoring.
             </p>
 
-            <div
-              style={{
-                marginTop: '18px',
-                padding: '22px',
-                borderRadius: '26px',
-                background:
-                  'linear-gradient(135deg, rgba(92, 53, 18, 0.96), rgba(154, 106, 34, 0.9))',
-                color: '#fff8eb',
-                boxShadow: '0 18px 42px rgba(92, 53, 18, 0.22)'
-              }}
-            >
-              <p
-                style={{
-                  margin: '0 0 10px',
-                  color: '#f4d28a',
-                  fontSize: '0.74rem',
-                  fontWeight: '850',
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase'
-                }}
-              >
-                Current Prompt
-              </p>
+            <div style={currentPromptStyle}>
+              <p style={{ ...eyebrowStyle, color: '#f4d28a' }}>Current Prompt</p>
 
-              <h3
-                style={{
-                  margin: '0 0 12px',
-                  fontSize: '1.25rem',
-                  lineHeight: '1.35'
-                }}
-              >
-                {round.card.title}
-              </h3>
+              <h3 style={promptTitleStyle}>{round.card.title}</h3>
 
-              <p
-                style={{
-                  margin: '0 0 12px',
-                  lineHeight: '1.6',
-                  color: 'rgba(255, 248, 235, 0.9)'
-                }}
-              >
-                {round.card.problem}
-              </p>
+              <p style={promptTextStyle}>{round.card.problem}</p>
 
-              <p
-                style={{
-                  margin: '0',
-                  lineHeight: '1.6',
-                  color: '#f4d28a',
-                  fontWeight: '750'
-                }}
-              >
-                {round.card.think_about_it}
-              </p>
+              <p style={promptQuestionStyle}>{round.card.think_about_it}</p>
             </div>
 
             <div className="gameStats" style={metricGridStyle}>
@@ -900,69 +968,34 @@ function GameHome({ currentUser }) {
 
             <button
               onClick={() => setFlippedProblem(!flippedProblem)}
-              style={{
-                width: '100%',
-                border: '0',
-                padding: '0',
-                background: 'transparent',
-                cursor: 'pointer',
-                textAlign: 'left',
-                marginTop: '20px'
-              }}
+              style={transparentCardButtonStyle}
             >
-              <div
-                className="problemCardVisual"
-                style={{
-                  position: 'relative',
-                  minHeight: '510px',
-                  borderRadius: '30px',
-                  overflow: 'hidden',
-                  boxShadow: '0 28px 60px rgba(0, 0, 0, 0.26)',
-                  transform: 'rotate(-1.5deg)'
-                }}
-              >
+              <div className="problemCardVisual" style={problemCardVisualStyle}>
                 <img
                   src={flippedProblem ? card1 : card2}
                   alt="Problem card design"
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover'
-                  }}
+                  style={cardImageStyle}
                 />
 
                 <div
                   style={{
-                    position: 'absolute',
-                    inset: 0,
+                    ...cardOverlayStyle,
                     background: flippedProblem
                       ? 'linear-gradient(135deg, rgba(3, 8, 20, 0.82), rgba(8, 22, 46, 0.74))'
                       : 'linear-gradient(180deg, rgba(3, 8, 20, 0.08), rgba(3, 8, 20, 0.72))'
                   }}
                 ></div>
 
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '24px',
-                    right: '24px',
-                    bottom: '28px',
-                    color: '#fff8eb'
-                  }}
-                >
+                <div style={cardTextOverlayStyle}>
                   {flippedProblem ? (
                     <>
                       <p style={{ ...eyebrowStyle, color: '#f4d28a' }}>
                         Problem Card Back
                       </p>
 
-                      <h3 style={{ margin: '0 0 12px', fontSize: '2rem' }}>
-                        GRIT Lab Africa
-                      </h3>
+                      <h3 style={largeCardTitleStyle}>GRIT Lab Africa</h3>
 
-                      <p style={{ margin: '0', lineHeight: '1.65' }}>
+                      <p style={largeCardTextStyle}>
                         Click again to view the current problem card.
                       </p>
                     </>
@@ -972,25 +1005,9 @@ function GameHome({ currentUser }) {
                         {round.card.problem_type}
                       </p>
 
-                      <h3
-                        style={{
-                          margin: '0 0 12px',
-                          fontSize: '1.75rem',
-                          lineHeight: '1.1'
-                        }}
-                      >
-                        {round.card.title}
-                      </h3>
+                      <h3 style={largeCardTitleStyle}>{round.card.title}</h3>
 
-                      <p
-                        style={{
-                          margin: '0',
-                          color: 'rgba(255, 248, 235, 0.88)',
-                          lineHeight: '1.65'
-                        }}
-                      >
-                        {round.card.problem}
-                      </p>
+                      <p style={largeCardTextStyle}>{round.card.problem}</p>
                     </>
                   )}
                 </div>
@@ -1012,58 +1029,27 @@ function GameHome({ currentUser }) {
               onDragOver={(event) => event.preventDefault()}
               onDrop={handleDrop}
               style={{
-                padding: '24px',
-                borderRadius: '28px',
+                ...solutionBoardStyle,
                 background:
                   selectedAiCards.length > 0
                     ? 'linear-gradient(135deg, rgba(255, 248, 235, 0.9), rgba(244, 210, 138, 0.42))'
-                    : 'rgba(255, 255, 255, 0.7)',
-                border: '2px dashed rgba(154, 106, 34, 0.38)',
-                boxShadow: '0 18px 42px rgba(80, 52, 20, 0.12)'
+                    : 'rgba(255, 255, 255, 0.7)'
               }}
             >
               <p style={eyebrowStyle}>Solution Board</p>
 
-              <h3 style={smallCardTitleStyle}>
-                Drop or tap up to 3 AI cards here.
-              </h3>
+              <h3 style={smallCardTitleStyle}>Drop or tap up to 3 AI cards here.</h3>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-                  gap: '12px',
-                  marginTop: '16px'
-                }}
-              >
+              <div style={selectedAiGridStyle}>
                 {selectedAiCards.length === 0 && (
-                  <div
-                    style={{
-                      padding: '18px',
-                      borderRadius: '20px',
-                      background: 'rgba(255, 255, 255, 0.58)',
-                      color: '#6b5540',
-                      lineHeight: '1.55'
-                    }}
-                  >
-                    No AI cards selected yet.
-                  </div>
+                  <div style={emptyDropStyle}>No AI cards selected yet.</div>
                 )}
 
                 {selectedAiCards.map((card) => (
                   <button
                     key={card.id}
                     onClick={() => removeSelectedAiCard(card.id)}
-                    style={{
-                      padding: '16px',
-                      border: '1px solid rgba(154, 106, 34, 0.3)',
-                      borderRadius: '20px',
-                      background:
-                        'linear-gradient(135deg, rgba(154, 106, 34, 0.96), rgba(92, 53, 18, 0.96))',
-                      color: '#fff8eb',
-                      textAlign: 'left',
-                      cursor: hasSubmittedExplanation ? 'default' : 'pointer'
-                    }}
+                    style={selectedAiCardStyle}
                   >
                     <p style={{ ...eyebrowStyle, color: '#f4d28a' }}>
                       Selected AI
@@ -1071,382 +1057,121 @@ function GameHome({ currentUser }) {
 
                     <strong>{card.title}</strong>
 
-                    <p style={{ margin: '8px 0 0', lineHeight: '1.5' }}>
-                      {card.type}
-                    </p>
+                    <p style={selectedAiTypeStyle}>{card.type}</p>
                   </button>
                 ))}
               </div>
             </div>
 
             <div style={panelInnerStyle}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '14px',
-                  flexWrap: 'wrap',
-                  marginBottom: '14px'
-                }}
-              >
+              <div style={rowBetweenStyle}>
                 <div>
-                  <p style={eyebrowStyle}>AI Card Library</p>
-
-                  <h3 style={smallCardTitleStyle}>
-                    All 30 AI cards are available.
-                  </h3>
+                  <p style={eyebrowStyle}>Explanation</p>
+                  <h3 style={smallCardTitleStyle}>Explain your solution.</h3>
                 </div>
 
-                <p
+                <strong
                   style={{
-                    margin: '0',
-                    padding: '8px 12px',
-                    borderRadius: '999px',
-                    background: 'rgba(154, 106, 34, 0.12)',
-                    color: '#5c3512',
-                    fontWeight: '850'
+                    color: explanationTooLong ? '#991b1b' : '#5c3512'
                   }}
                 >
-                  {selectedAiCards.length}/3 selected
-                </p>
+                  {wordCount}/100 words
+                </strong>
               </div>
-
-              <div
-                style={{
-                  maxHeight: '390px',
-                  overflowY: 'auto',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-                  gap: '12px',
-                  paddingRight: '6px'
-                }}
-              >
-                {aiCards.map((card) => {
-                  const selected = selectedAiCards.some(
-                    (selectedCard) => selectedCard.id === card.id
-                  )
-                  const flipped = flippedAiCards.includes(card.id)
-
-                  return (
-                    <div
-                      key={card.id}
-                      draggable={!hasSubmittedExplanation}
-                      onDragStart={(event) => handleDragStart(event, card.id)}
-                      style={{
-                        minHeight: '190px',
-                        borderRadius: '22px',
-                        background: selected
-                          ? 'linear-gradient(135deg, rgba(154, 106, 34, 0.96), rgba(92, 53, 18, 0.96))'
-                          : flipped
-                            ? 'linear-gradient(135deg, #b8860b, #5c3512)'
-                            : 'rgba(255, 255, 255, 0.68)',
-                        color: selected || flipped ? '#fff8eb' : '#3b2817',
-                        border: selected
-                          ? '1px solid rgba(244, 210, 138, 0.55)'
-                          : '1px solid rgba(139, 92, 40, 0.18)',
-                        boxShadow: selected
-                          ? '0 18px 40px rgba(80, 52, 20, 0.24)'
-                          : '0 12px 28px rgba(80, 52, 20, 0.08)',
-                        padding: '16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      {flipped ? (
-                        <div>
-                          <p style={{ ...eyebrowStyle, color: '#f4d28a' }}>
-                            AI Card Back
-                          </p>
-
-                          <h4 style={{ margin: '0 0 10px', fontSize: '1.2rem' }}>
-                            GRIT Lab Africa AI Card
-                          </h4>
-
-                          <p style={{ margin: '0', lineHeight: '1.55' }}>
-                            Click “View Front” to see the AI capability.
-                          </p>
-                        </div>
-                      ) : (
-                        <div>
-                          <p
-                            style={{
-                              ...eyebrowStyle,
-                              color: selected ? '#f4d28a' : '#9a6a22'
-                            }}
-                          >
-                            {selected ? 'Selected' : card.type}
-                          </p>
-
-                          <h4
-                            style={{
-                              margin: '0 0 10px',
-                              fontSize: '1.08rem',
-                              lineHeight: '1.15'
-                            }}
-                          >
-                            {card.title}
-                          </h4>
-
-                          <p
-                            style={{
-                              margin: '0',
-                              fontSize: '0.9rem',
-                              lineHeight: '1.5',
-                              opacity: 0.9
-                            }}
-                          >
-                            {card.canDo}
-                          </p>
-                        </div>
-                      )}
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: '8px',
-                          flexWrap: 'wrap',
-                          marginTop: '14px'
-                        }}
-                      >
-                        <button
-                          onClick={() => toggleAiCard(card)}
-                          disabled={
-                            hasSubmittedExplanation ||
-                            (!selected && selectedAiCards.length >= 3)
-                          }
-                          style={{
-                            border: '0',
-                            borderRadius: '999px',
-                            padding: '9px 12px',
-                            cursor:
-                              hasSubmittedExplanation ||
-                              (!selected && selectedAiCards.length >= 3)
-                                ? 'default'
-                                : 'pointer',
-                            background: selected
-                              ? 'rgba(255, 248, 235, 0.18)'
-                              : '#5c3512',
-                            color: '#fff8eb',
-                            fontSize: '0.8rem',
-                            fontWeight: '850',
-                            opacity:
-                              hasSubmittedExplanation ||
-                              (!selected && selectedAiCards.length >= 3)
-                                ? 0.55
-                                : 1
-                          }}
-                        >
-                          {selected ? 'Remove' : 'Select'}
-                        </button>
-
-                        <button
-                          onClick={() => toggleAiFlip(card.id)}
-                          style={{
-                            border: '1px solid rgba(255, 248, 235, 0.35)',
-                            borderRadius: '999px',
-                            padding: '9px 12px',
-                            cursor: 'pointer',
-                            background: 'rgba(255, 255, 255, 0.14)',
-                            color: selected || flipped ? '#fff8eb' : '#5c3512',
-                            fontSize: '0.8rem',
-                            fontWeight: '850'
-                          }}
-                        >
-                          {flipped ? 'View Front' : 'Flip'}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div style={panelInnerStyle}>
-              <p style={eyebrowStyle}>100-word explanation</p>
-
-              <p style={paragraphStyle}>
-                Explain how your selected AI cards can solve or reduce the
-                problem. Keep it practical, realistic and clear.
-              </p>
 
               <textarea
                 value={userExplanation}
                 onChange={(event) => setUserExplanation(event.target.value)}
-                placeholder="I think these AI cards can help because..."
-                rows={5}
-                disabled={hasSubmittedExplanation}
+                disabled={hasSubmittedExplanation || aiLoading}
+                placeholder="Write how your selected AI card(s) can help solve the problem in a realistic African context..."
                 style={{
-                  width: '100%',
-                  padding: '14px',
-                  borderRadius: '16px',
+                  ...textAreaStyle,
                   border: explanationTooLong
-                    ? '1px solid #b91c1c'
-                    : '1px solid rgba(139, 92, 40, 0.25)',
-                  background: 'rgba(255, 255, 255, 0.78)',
-                  color: '#3b2817',
-                  fontSize: '0.95rem',
-                  lineHeight: '1.6',
-                  resize: 'vertical',
-                  fontFamily: 'inherit',
-                  boxSizing: 'border-box'
+                    ? '2px solid rgba(185, 28, 28, 0.5)'
+                    : '1px solid rgba(139, 92, 40, 0.22)'
                 }}
               />
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  flexWrap: 'wrap',
-                  marginTop: '10px'
-                }}
-              >
-                <p
-                  style={{
-                    margin: '0',
-                    color: explanationTooLong ? '#b91c1c' : '#6b5540',
-                    fontSize: '0.9rem',
-                    fontWeight: '750'
-                  }}
-                >
-                  {wordCount}/100 words
-                </p>
-
-                <p
-                  style={{
-                    margin: '0',
-                    color: '#6b5540',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  Selected AI cards: {selectedAiCards.length}/3
-                </p>
-              </div>
-
               {explanationTooLong && (
-                <p style={{ margin: '10px 0 0', color: '#b91c1c' }}>
-                  Your explanation is too long. Please reduce it to 100 words or
-                  less.
+                <p style={warningTextStyle}>
+                  Your explanation is too long. Please keep it to 100 words or less.
                 </p>
               )}
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  gap: '10px',
-                  flexWrap: 'wrap',
-                  marginTop: '16px'
-                }}
-              >
+              {aiError && <p style={errorTextStyle}>{aiError}</p>}
+
+              <div style={centerButtonRowStyle}>
                 <button
                   onClick={submitExplanation}
                   disabled={
                     selectedAiCards.length === 0 ||
                     !userExplanation.trim() ||
                     explanationTooLong ||
-                    aiLoading ||
-                    hasSubmittedExplanation
+                    hasSubmittedExplanation ||
+                    aiLoading
                   }
                   style={{
                     ...primaryButtonStyle,
-                    marginTop: 0,
                     opacity:
                       selectedAiCards.length === 0 ||
                       !userExplanation.trim() ||
                       explanationTooLong ||
-                      aiLoading ||
-                      hasSubmittedExplanation
+                      hasSubmittedExplanation ||
+                      aiLoading
                         ? 0.45
-                        : 1
+                        : 1,
+                    cursor:
+                      selectedAiCards.length === 0 ||
+                      !userExplanation.trim() ||
+                      explanationTooLong ||
+                      hasSubmittedExplanation ||
+                      aiLoading
+                        ? 'default'
+                        : 'pointer'
                   }}
                 >
-                  {aiLoading ? 'DeepSeek is scoring...' : 'Submit Solution'}
+                  {aiLoading ? 'Scoring with DeepSeek...' : 'Submit Solution'}
                 </button>
 
                 <button
                   onClick={() => setShowHintConfirm(true)}
-                  disabled={hasSubmittedExplanation}
-                  style={{
-                    ...secondaryButtonStyle,
-                    opacity: hasSubmittedExplanation ? 0.5 : 1
-                  }}
+                  disabled={aiLoading}
+                  style={secondaryButtonStyle}
                 >
-                  Request Hint - 20 GLA coin
+                  Request Hint - 20 GLA
                 </button>
+
+                {latestAttempt && (
+                  <button
+                    onClick={() => setScreen('score')}
+                    style={secondaryButtonStyle}
+                  >
+                    View Latest Score
+                  </button>
+                )}
 
                 <button onClick={handleNextRound} style={secondaryButtonStyle}>
                   Next Problem
                 </button>
               </div>
 
-              {hintMessage && (
-                <div
-                  style={{
-                    marginTop: '16px',
-                    padding: '16px',
-                    borderRadius: '18px',
-                    background: 'rgba(154, 106, 34, 0.12)',
-                    color: '#5c3512',
-                    lineHeight: '1.55'
-                  }}
-                >
-                  <strong>Hint:</strong> {hintMessage}
-                </div>
-              )}
-
               {showHintConfirm && (
-                <div
-                  style={{
-                    marginTop: '16px',
-                    padding: '18px',
-                    borderRadius: '20px',
-                    background: 'rgba(92, 53, 18, 0.94)',
-                    color: '#fff8eb'
-                  }}
-                >
-                  <p style={{ margin: '0 0 12px', lineHeight: '1.55' }}>
-                    This hint costs 20 GLA coin. Your current balance is{' '}
-                    {glaCoinBalance} GLA coin.
+                <div style={hintBoxStyle}>
+                  <h3 style={smallCardTitleStyle}>Confirm hint purchase</h3>
+
+                  <p style={smallCardTextStyle}>
+                    A hint costs 20 GLA coin. Your current balance is{' '}
+                    <strong>{glaCoinBalance}</strong> GLA coin.
                   </p>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      gap: '10px',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    <button
-                      onClick={confirmHintPurchase}
-                      style={{
-                        border: '0',
-                        borderRadius: '999px',
-                        padding: '10px 16px',
-                        cursor: 'pointer',
-                        background: '#f4d28a',
-                        color: '#5c3512',
-                        fontWeight: '850'
-                      }}
-                    >
-                      Confirm Hint
+                  <div style={centerButtonRowStyle}>
+                    <button onClick={confirmHintPurchase} style={primaryButtonStyle}>
+                      Yes, use 20 GLA coin
                     </button>
 
                     <button
                       onClick={() => setShowHintConfirm(false)}
-                      style={{
-                        border: '1px solid rgba(255, 248, 235, 0.3)',
-                        borderRadius: '999px',
-                        padding: '10px 16px',
-                        cursor: 'pointer',
-                        background: 'transparent',
-                        color: '#fff8eb',
-                        fontWeight: '850'
-                      }}
+                      style={secondaryButtonStyle}
                     >
                       Cancel
                     </button>
@@ -1454,109 +1179,97 @@ function GameHome({ currentUser }) {
                 </div>
               )}
 
-              {aiError && (
-                <p style={{ margin: '16px 0 0', color: '#b91c1c' }}>
-                  {aiError}
-                </p>
-              )}
-
-              {aiResult && (
-                <div
-                  style={{
-                    marginTop: '18px',
-                    padding: '22px',
-                    borderRadius: '24px',
-                    background:
-                      'linear-gradient(135deg, rgba(255, 248, 235, 0.92), rgba(244, 210, 138, 0.38))',
-                    border: '1px solid rgba(154, 106, 34, 0.22)'
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                      flexWrap: 'wrap',
-                      marginBottom: '16px'
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '72px',
-                        height: '72px',
-                        borderRadius: '50%',
-                        background:
-                          'linear-gradient(135deg, #9a6a22, #5c3512)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#fff8eb',
-                        fontSize: '1.45rem',
-                        fontWeight: '900'
-                      }}
-                    >
-                      {aiResult.totalScore}
-                    </div>
-
-                    <div>
-                      <p style={eyebrowStyle}>DeepSeek Score</p>
-
-                      <h3 style={smallCardTitleStyle}>
-                        {aiResult.glaCoinEarned} GLA coin earned
-                      </h3>
-                    </div>
-                  </div>
-
-                  <p style={paragraphStyle}>{aiResult.overallFeedback}</p>
-
-                  <p
-                    style={{
-                      margin: '12px 0 0',
-                      color: '#5c3512',
-                      fontWeight: '850',
-                      lineHeight: '1.55'
-                    }}
-                  >
-                    Improvement: {aiResult.improvement}
-                  </p>
-
-                  {aiResult.subScores && (
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns:
-                          'repeat(auto-fit, minmax(180px, 1fr))',
-                        gap: '10px',
-                        marginTop: '18px'
-                      }}
-                    >
-                      {Object.entries(aiResult.subScores).map(([key, value]) => (
-                        <div
-                          key={key}
-                          style={{
-                            padding: '12px',
-                            borderRadius: '16px',
-                            background: 'rgba(255, 255, 255, 0.7)',
-                            color: '#3b2817'
-                          }}
-                        >
-                          <strong
-                            style={{
-                              display: 'block',
-                              marginBottom: '6px',
-                              color: '#5c3512'
-                            }}
-                          >
-                            {key.replaceAll('_', ' ')}
-                          </strong>
-
-                          <span>{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {hintMessage && (
+                <div style={hintBoxStyle}>
+                  <p style={eyebrowStyle}>Hint</p>
+                  <p style={smallCardTextStyle}>{hintMessage}</p>
                 </div>
               )}
+            </div>
+
+            <div style={panelInnerStyle}>
+              <div style={rowBetweenStyle}>
+                <div>
+                  <p style={eyebrowStyle}>AI Card Library</p>
+                  <h3 style={smallCardTitleStyle}>All 30 AI cards are available.</h3>
+                </div>
+
+                <strong style={{ color: '#5c3512' }}>
+                  {selectedAiCards.length}/3 selected
+                </strong>
+              </div>
+
+              <div style={aiLibraryStyle}>
+                {aiCards.map((card) => {
+                  const selected = selectedAiCards.some(
+                    (selectedCard) => selectedCard.id === card.id
+                  )
+                  const flipped = flippedAiCards.includes(card.id)
+
+                  return (
+                    <div key={card.id} style={{ display: 'grid', gap: '8px' }}>
+                      <button
+                        draggable={!hasSubmittedExplanation}
+                        onDragStart={(event) => handleDragStart(event, card.id)}
+                        onClick={() => toggleAiCard(card)}
+                        style={{
+                          ...aiCardStyle,
+                          border: selected
+                            ? '2px solid rgba(154, 106, 34, 0.78)'
+                            : '1px solid rgba(139, 92, 40, 0.18)',
+                          background: selected
+                            ? 'linear-gradient(135deg, rgba(154, 106, 34, 0.92), rgba(92, 53, 18, 0.96))'
+                            : 'rgba(255, 255, 255, 0.68)',
+                          color: selected ? '#fff8eb' : '#3b2817'
+                        }}
+                      >
+                        {flipped ? (
+                          <>
+                            <p
+                              style={{
+                                ...eyebrowStyle,
+                                color: selected ? '#f4d28a' : '#9a6a22'
+                              }}
+                            >
+                              AI Card Back
+                            </p>
+                            <h3 style={{ margin: 0 }}>GRIT Lab Africa</h3>
+                            <p style={{ margin: '10px 0 0', lineHeight: '1.5' }}>
+                              Golden AI capability card.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p
+                              style={{
+                                ...eyebrowStyle,
+                                color: selected ? '#f4d28a' : '#9a6a22'
+                              }}
+                            >
+                              {card.type}
+                            </p>
+
+                            <h3 style={{ margin: '0 0 8px', lineHeight: '1.2' }}>
+                              {card.title}
+                            </h3>
+
+                            <p style={{ margin: 0, lineHeight: '1.5' }}>
+                              {card.canDo}
+                            </p>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => toggleAiFlip(card.id)}
+                        style={miniButtonStyle}
+                      >
+                        {flipped ? 'Show Front' : 'Flip Card'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -1564,109 +1277,377 @@ function GameHome({ currentUser }) {
     )
   }
 
-  function renderDashboardScreen() {
+  function renderScoringScreen() {
+    if (!latestAttempt) {
+      return (
+        <div style={panelStyle}>
+          <p style={eyebrowStyle}>Scoring and feedback</p>
+          <h1 style={sectionTitleStyle}>No score yet.</h1>
+          <p style={paragraphStyle}>
+            Submit a solution first. After DeepSeek scores your answer, this
+            screen will show your score, feedback and sub-score breakdown.
+          </p>
+
+          <div style={centerButtonRowStyle}>
+            <button onClick={() => setScreen('play')} style={primaryButtonStyle}>
+              Go to Game
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    const subScores = latestAttempt.subScores || {}
+    const selectedCards = latestAttempt.selectedAiCards || []
+
     return (
       <div style={panelStyle}>
-        <p style={eyebrowStyle}>Player dashboard</p>
+        <p style={eyebrowStyle}>Scoring and feedback</p>
 
-        <h1 style={sectionTitleStyle}>Your AfriQuest progress.</h1>
+        <h1 style={sectionTitleStyle}>DeepSeek reviewed your solution.</h1>
 
-        <div style={metricGridStyle}>
-          <MetricCard title="GLA Coin Balance" value={glaCoinBalance} />
-          <MetricCard title="Completed Cards" value={completedProblems} />
-          <MetricCard title="Average Score" value={`${averageScore}%`} />
-          <MetricCard
-            title="Certificate"
-            value={certificateUnlocked ? 'Unlocked' : 'Locked'}
-          />
-        </div>
+        <div style={scoreHeroStyle}>
+          <div style={scoreCircleStyle}>{latestAttempt.totalScore}</div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '16px',
-            marginTop: '24px'
-          }}
-        >
-          <div style={smallCardStyle}>
-            <h3 style={smallCardTitleStyle}>Selected problem cards</h3>
-
-            <p style={smallCardTextStyle}>
-              {selectedProblemIds.length} problem cards selected in your active
-              stack.
+          <div>
+            <p style={{ ...eyebrowStyle, color: '#f4d28a' }}>
+              {latestAttempt.totalScore >= 75
+                ? 'Strong certification-level attempt'
+                : latestAttempt.totalScore >= 50
+                  ? 'Good start, improve the details'
+                  : 'Needs more practical detail'}
             </p>
-          </div>
 
-          <div style={smallCardStyle}>
-            <h3 style={smallCardTitleStyle}>Certification rule</h3>
+            <h2 style={scoreTitleStyle}>
+              {latestAttempt.glaCoinEarned} GLA coin earned
+            </h2>
 
-            <p style={smallCardTextStyle}>
-              Complete 10 problem cards with an average score of 75 or higher.
-            </p>
-          </div>
-
-          <div style={smallCardStyle}>
-            <h3 style={smallCardTitleStyle}>Hint system</h3>
-
-            <p style={smallCardTextStyle}>
-              Each hint costs 20 GLA coin and helps you think without giving away
-              the full answer.
+            <p style={scoreTextStyle}>
+              Current balance: <strong>{glaCoinBalance} GLA coin</strong>
             </p>
           </div>
         </div>
 
-        <h2
-          style={{
-            margin: '34px 0 16px',
-            color: '#5c3512',
-            fontSize: '1.6rem'
-          }}
-        >
-          Attempt history
-        </h2>
+        <div style={twoColumnGridStyle}>
+          <div style={smallCardStyle}>
+            <p style={eyebrowStyle}>Problem solved</p>
+            <h3 style={smallCardTitleStyle}>{latestAttempt.problemTitle}</h3>
+            <p style={smallCardTextStyle}>
+              Attempt #{latestAttempt.attemptNumber} submitted on{' '}
+              {latestAttempt.createdAt}.
+            </p>
+          </div>
 
-        {attempts.length === 0 ? (
-          <p style={paragraphStyle}>No attempts submitted yet.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {[...attempts].reverse().map((attempt) => (
-              <div key={attempt.id} style={smallCardStyle}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  <h3 style={smallCardTitleStyle}>{attempt.problemTitle}</h3>
+          <div style={smallCardStyle}>
+            <p style={eyebrowStyle}>AI cards used</p>
 
-                  <strong style={{ color: '#9a6a22' }}>
-                    {attempt.totalScore}/100
-                  </strong>
-                </div>
-
-                <p style={smallCardTextStyle}>
-                  AI cards:{' '}
-                  {attempt.selectedAiCards.map((card) => card.title).join(', ')}
-                </p>
-
-                <p style={smallCardTextStyle}>{attempt.feedback}</p>
-
-                <p
-                  style={{
-                    margin: '10px 0 0',
-                    color: '#6b5540',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  Submitted: {attempt.createdAt}
-                </p>
+            {selectedCards.length === 0 ? (
+              <p style={smallCardTextStyle}>No AI cards were recorded.</p>
+            ) : (
+              <div style={chipGridStyle}>
+                {selectedCards.map((card) => (
+                  <span key={card.id} style={chipStyle}>
+                    {card.title}
+                  </span>
+                ))}
               </div>
-            ))}
+            )}
+          </div>
+        </div>
+
+        <div style={{ ...smallCardStyle, marginTop: '18px' }}>
+          <p style={eyebrowStyle}>Feedback</p>
+
+          <h3 style={smallCardTitleStyle}>Overall feedback</h3>
+          <p style={smallCardTextStyle}>{latestAttempt.feedback}</p>
+
+          <h3 style={{ ...smallCardTitleStyle, marginTop: '18px' }}>
+            How to improve
+          </h3>
+          <p style={smallCardTextStyle}>{latestAttempt.improvement}</p>
+        </div>
+
+        <div style={{ ...smallCardStyle, marginTop: '18px' }}>
+          <p style={eyebrowStyle}>Detailed sub-score breakdown</p>
+
+          <h3 style={smallCardTitleStyle}>Your score by rubric area</h3>
+
+          <div style={subScoreGridStyle}>
+            {rubricRows.map((row) => {
+              const score = toSafeNumber(subScores[row.key])
+              const percentage =
+                row.max > 0 ? Math.round((score / row.max) * 100) : 0
+
+              return (
+                <div key={row.key} style={subScoreCardStyle}>
+                  <div style={rowBetweenStyle}>
+                    <strong style={{ color: '#5c3512' }}>{row.label}</strong>
+                    <span style={scoreLabelStyle}>
+                      {score}/{row.max}
+                    </span>
+                  </div>
+
+                  <div style={progressTrackStyle}>
+                    <div
+                      style={{
+                        ...progressFillStyle,
+                        width: `${Math.min(100, Math.max(0, percentage))}%`
+                      }}
+                    ></div>
+                  </div>
+
+                  <p style={{ ...smallCardTextStyle, fontSize: '0.86rem' }}>
+                    {row.meaning}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div style={{ ...smallCardStyle, marginTop: '18px' }}>
+          <p style={eyebrowStyle}>First / latest / best score</p>
+
+          <h3 style={smallCardTitleStyle}>Score history for this problem</h3>
+
+          {latestAttemptProblemStats ? (
+            <div style={metricGridStyle}>
+              <MetricCard
+                title="First Score"
+                value={`${latestAttemptProblemStats.first?.totalScore || 0}/100`}
+              />
+              <MetricCard
+                title="Latest Score"
+                value={`${latestAttemptProblemStats.latest?.totalScore || 0}/100`}
+              />
+              <MetricCard
+                title="Best Score"
+                value={`${latestAttemptProblemStats.best?.totalScore || 0}/100`}
+              />
+              <MetricCard
+                title="Attempts"
+                value={latestAttemptProblemStats.count || 0}
+              />
+            </div>
+          ) : (
+            <p style={smallCardTextStyle}>
+              No score history found for this problem yet.
+            </p>
+          )}
+        </div>
+
+        <div style={centerButtonRowStyle}>
+          <button onClick={() => setScreen('retry')} style={primaryButtonStyle}>
+            Retry This Problem
+          </button>
+
+          <button onClick={handleNextRound} style={secondaryButtonStyle}>
+            Next Problem
+          </button>
+
+          <button onClick={() => setScreen('dashboard')} style={secondaryButtonStyle}>
+            Dashboard
+          </button>
+
+          <button onClick={() => setScreen('coins')} style={secondaryButtonStyle}>
+            GLA Coin History
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderRetryAttemptScreen() {
+    if (!round.card) {
+      return (
+        <div style={panelStyle}>
+          <p style={eyebrowStyle}>Retry attempt</p>
+          <h1 style={sectionTitleStyle}>No active problem to retry.</h1>
+          <p style={paragraphStyle}>Start the game first, then submit an attempt.</p>
+
+          <div style={centerButtonRowStyle}>
+            <button onClick={() => setScreen('play')} style={primaryButtonStyle}>
+              Go to Game
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div style={panelStyle}>
+        <p style={eyebrowStyle}>Retry attempt</p>
+
+        <h1 style={sectionTitleStyle}>Try the same problem again.</h1>
+
+        <p style={paragraphStyle}>
+          You can retry this problem to improve your solution. Your old attempt
+          is kept in the history. The dashboard will still show your first,
+          latest and best score.
+        </p>
+
+        <div style={{ ...smallCardStyle, marginTop: '24px' }}>
+          <p style={eyebrowStyle}>Problem card</p>
+          <h3 style={smallCardTitleStyle}>{round.card.title}</h3>
+          <p style={smallCardTextStyle}>{round.card.problem}</p>
+        </div>
+
+        {currentProblemAttemptStats && (
+          <div style={{ ...smallCardStyle, marginTop: '18px' }}>
+            <p style={eyebrowStyle}>Your score history</p>
+
+            <h3 style={smallCardTitleStyle}>First, latest and best score</h3>
+
+            <div style={metricGridStyle}>
+              <MetricCard
+                title="First Score"
+                value={`${currentProblemAttemptStats.first?.totalScore || 0}/100`}
+              />
+              <MetricCard
+                title="Latest Score"
+                value={`${currentProblemAttemptStats.latest?.totalScore || 0}/100`}
+              />
+              <MetricCard
+                title="Best Score"
+                value={`${currentProblemAttemptStats.best?.totalScore || 0}/100`}
+              />
+              <MetricCard
+                title="Attempts"
+                value={currentProblemAttemptStats.count || 0}
+              />
+            </div>
           </div>
         )}
+
+        <div style={{ ...smallCardStyle, marginTop: '18px' }}>
+          <p style={eyebrowStyle}>What will happen now?</p>
+
+          <ul style={listStyle}>
+            <li>Your selected AI cards will be cleared.</li>
+            <li>Your explanation box will be cleared.</li>
+            <li>The same problem card will stay active.</li>
+            <li>You can submit again and try to improve your score.</li>
+          </ul>
+        </div>
+
+        <div style={centerButtonRowStyle}>
+          <button onClick={handleRetryCurrentProblem} style={primaryButtonStyle}>
+            Start Retry Attempt
+          </button>
+
+          <button onClick={() => setScreen('score')} style={secondaryButtonStyle}>
+            Cancel
+          </button>
+
+          <button onClick={handleNextRound} style={secondaryButtonStyle}>
+            Skip to Next Problem
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderDashboardScreen() {
+    return (
+      <PlayerDashboardScreen
+        firstName={firstName}
+        selectedProblemCount={selectedProblemIds.length}
+        completedProblems={completedProblems}
+        averageScore={averageScore}
+        certificateUnlocked={certificateUnlocked}
+        certificationProgress={certificationProgress}
+        glaCoinBalance={glaCoinBalance}
+        totalGlaCoinEarned={totalGlaCoinEarned}
+        glaCoinSpentOnHints={glaCoinSpentOnHints}
+        attempts={attempts}
+        attemptStatsByProblem={attemptStatsByProblem}
+        bestScoringProblems={bestScoringProblems}
+        latestAttempt={latestAttempt}
+        onOpenCoinHistory={() => setScreen('coins')}
+        onOpenLatestScore={() => setScreen(latestAttempt ? 'score' : 'play')}
+        onOpenCertificate={() => setScreen('certificate')}
+      />
+    )
+  }
+
+  function renderCoinHistoryScreen() {
+    return (
+      <div style={panelStyle}>
+        <p style={eyebrowStyle}>GLA coin transaction history</p>
+
+        <h1 style={sectionTitleStyle}>Your GLA coin wallet.</h1>
+
+        <p style={paragraphStyle}>
+          This screen tracks the coin you earned from DeepSeek scoring and the
+          coin you spent on hints.
+        </p>
+
+        <div style={metricGridStyle}>
+          <MetricCard title="Current Balance" value={glaCoinBalance} />
+          <MetricCard title="Total Earned" value={totalGlaCoinEarned} />
+          <MetricCard title="Spent on Hints" value={glaCoinSpentOnHints} />
+          <MetricCard title="Transactions" value={coinTransactions.length} />
+        </div>
+
+        <h2 style={subHeadingStyle}>Transaction list</h2>
+
+        {coinTransactions.length === 0 ? (
+          <div style={smallCardStyle}>
+            <h3 style={smallCardTitleStyle}>No coin movement yet</h3>
+            <p style={smallCardTextStyle}>
+              Submit a scored solution to earn GLA coin, or request a hint to
+              spend 20 GLA coin.
+            </p>
+          </div>
+        ) : (
+          <div style={listGridStyle}>
+            {coinTransactions.map((transaction) => {
+              const isEarned = transaction.type === 'earned'
+
+              return (
+                <div key={transaction.id} style={smallCardStyle}>
+                  <div style={rowBetweenStyle}>
+                    <div>
+                      <p style={eyebrowStyle}>
+                        {isEarned ? 'Coin earned' : 'Coin spent'}
+                      </p>
+                      <h3 style={smallCardTitleStyle}>{transaction.reason}</h3>
+                    </div>
+
+                    <strong
+                      style={{
+                        ...coinBadgeStyle,
+                        background: isEarned
+                          ? 'rgba(21, 128, 61, 0.12)'
+                          : 'rgba(185, 28, 28, 0.1)',
+                        color: isEarned ? '#166534' : '#991b1b'
+                      }}
+                    >
+                      {isEarned ? '+' : '-'}
+                      {transaction.amount} GLA
+                    </strong>
+                  </div>
+
+                  <p style={smallCardTextStyle}>
+                    Problem: {transaction.problemTitle || 'General game activity'}
+                  </p>
+
+                  <p style={dateTextStyle}>
+                    Balance after transaction: {transaction.balanceAfter} GLA coin
+                  </p>
+
+                  <p style={dateTextStyle}>Date: {transaction.createdAt}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div style={centerButtonRowStyle}>
+          <button onClick={() => setScreen('dashboard')} style={primaryButtonStyle}>
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     )
   }
@@ -1674,120 +1655,72 @@ function GameHome({ currentUser }) {
   function renderCertificateScreen() {
     return (
       <div style={panelStyle}>
-        <p style={eyebrowStyle}>Certificate screen</p>
+        <p style={eyebrowStyle}>Certificate</p>
 
         <h1 style={sectionTitleStyle}>
           {certificateUnlocked
-            ? 'Certificate unlocked.'
-            : 'Certificate still locked.'}
+            ? 'Your certificate is unlocked.'
+            : 'Your certificate is not unlocked yet.'}
         </h1>
 
         <p style={paragraphStyle}>
-          Certification unlocks after 10 completed problem cards with an average
-          score of at least 75 GLA coin.
+          Certificate unlocks after 10 completed problem cards with an average
+          score of 75 or higher.
         </p>
 
-        <div
-          style={{
-            marginTop: '28px',
-            padding: '34px',
-            borderRadius: '30px',
-            background: certificateUnlocked
-              ? 'linear-gradient(135deg, rgba(255, 248, 235, 0.98), rgba(244, 210, 138, 0.5))'
-              : 'rgba(255, 255, 255, 0.62)',
-            border: certificateUnlocked
-              ? '2px solid rgba(154, 106, 34, 0.45)'
-              : '1px solid rgba(139, 92, 40, 0.18)',
-            color: '#3b2817',
-            textAlign: 'center',
-            boxShadow: '0 24px 60px rgba(80, 52, 20, 0.16)'
-          }}
-        >
-          <p style={eyebrowStyle}>GRIT Lab Africa</p>
+        <div style={certificatePreviewStyle}>
+          <p style={{ ...eyebrowStyle, color: '#f4d28a' }}>GRIT Lab Africa</p>
 
-          <h2
-            style={{
-              margin: '0 auto 16px',
-              maxWidth: '760px',
-              color: '#5c3512',
-              fontSize: 'clamp(2rem, 4vw, 3.4rem)',
-              lineHeight: '1.05',
-              letterSpacing: '-0.05em'
-            }}
-          >
+          <h2 style={certificateTitleStyle}>
             Artificial Intelligence and Practical Applications
           </h2>
 
-          <p style={paragraphStyle}>
+          <p style={certificateTextStyle}>
             Gaming SDG Problems and Ideating Solutions for Africa
           </p>
 
-          <div
+          <div style={certificateNameStyle}>{fullName}</div>
+
+          <p style={certificateTextStyle}>
+            Completed Problems: {completedProblems} • Average Score: {averageScore}%
+          </p>
+
+          <p style={certificateTextStyle}>
+            Status: {certificateUnlocked ? 'Certified' : 'Not Certified Yet'}
+          </p>
+        </div>
+
+        <div style={centerButtonRowStyle}>
+          <button
+            disabled={!certificateUnlocked}
             style={{
-              width: 'min(520px, 100%)',
-              margin: '28px auto',
-              padding: '22px',
-              borderRadius: '24px',
-              background: 'rgba(255, 255, 255, 0.72)'
+              ...primaryButtonStyle,
+              opacity: certificateUnlocked ? 1 : 0.45,
+              cursor: certificateUnlocked ? 'pointer' : 'default'
             }}
           >
-            <p style={{ margin: '0 0 10px', color: '#6b5540' }}>
-              Awarded to
-            </p>
+            Download Certificate
+          </button>
 
-            <h3
-              style={{
-                margin: '0',
-                color: '#5c3512',
-                fontSize: '2rem'
-              }}
-            >
-              {fullName}
-            </h3>
-          </div>
-
-          <div style={metricGridStyle}>
-            <MetricCard title="Completed" value={`${completedProblems}/10`} />
-            <MetricCard title="Average" value={`${averageScore}%`} />
-            <MetricCard
-              title="Status"
-              value={certificateUnlocked ? 'Certified' : 'Not Yet'}
-            />
-          </div>
-
-          <div style={centerButtonRowStyle}>
-            <button
-              onClick={() => window.print()}
-              disabled={!certificateUnlocked}
-              style={{
-                ...primaryButtonStyle,
-                marginTop: 0,
-                opacity: certificateUnlocked ? 1 : 0.45,
-                cursor: certificateUnlocked ? 'pointer' : 'default'
-              }}
-            >
-              Download / Print Certificate
-            </button>
-          </div>
+          <button onClick={() => setScreen('dashboard')} style={secondaryButtonStyle}>
+            Back to Dashboard
+          </button>
         </div>
       </div>
     )
   }
 
   return (
-    <section
-      className="gameSection"
-      style={{
-        width: 'min(1450px, calc(100vw - 48px))',
-        margin: '40px auto 80px'
-      }}
-    >
+    <section style={gameHomeWrapperStyle}>
       {renderTopNavigation()}
 
       {screen === 'intro' && renderIntroScreen()}
       {screen === 'select' && renderProblemSelectionScreen()}
       {screen === 'play' && renderPlayScreen()}
+      {screen === 'score' && renderScoringScreen()}
+      {screen === 'retry' && renderRetryAttemptScreen()}
       {screen === 'dashboard' && renderDashboardScreen()}
+      {screen === 'coins' && renderCoinHistoryScreen()}
       {screen === 'certificate' && renderCertificateScreen()}
     </section>
   )
@@ -1795,35 +1728,32 @@ function GameHome({ currentUser }) {
 
 function MetricCard({ title, value }) {
   return (
-    <div
-      style={{
-        padding: '18px',
-        borderRadius: '22px',
-        background: 'rgba(255, 255, 255, 0.6)',
-        border: '1px solid rgba(139, 92, 40, 0.16)'
-      }}
-    >
-      <strong
-        style={{
-          display: 'block',
-          color: '#5c3512',
-          fontSize: '1.7rem'
-        }}
-      >
-        {value}
-      </strong>
-
-      <span
-        style={{
-          color: '#6b5540',
-          fontSize: '0.9rem',
-          fontWeight: '650'
-        }}
-      >
-        {title}
-      </span>
+    <div style={metricCardStyle}>
+      <strong style={metricValueStyle}>{value}</strong>
+      <span style={metricTitleStyle}>{title}</span>
     </div>
   )
+}
+
+const gameHomeWrapperStyle = {
+  width: 'min(1450px, calc(100vw - 48px))',
+  margin: '34px auto 0'
+}
+
+const topNavStyle = {
+  display: 'flex',
+  gap: '10px',
+  flexWrap: 'wrap',
+  justifyContent: 'center',
+  marginBottom: '24px'
+}
+
+const topNavButtonStyle = {
+  border: '0',
+  borderRadius: '999px',
+  padding: '11px 18px',
+  cursor: 'pointer',
+  fontWeight: '850'
 }
 
 const panelStyle = {
@@ -1855,12 +1785,13 @@ const eyebrowStyle = {
 }
 
 const bigTitleStyle = {
-  margin: '0 0 20px',
+  margin: '0 0 18px',
   color: '#4b2b10',
-  fontSize: 'clamp(2.6rem, 5vw, 4.8rem)',
-  lineHeight: '0.96',
+  fontSize: 'clamp(2.5rem, 5vw, 4.8rem)',
+  lineHeight: '0.95',
   letterSpacing: '-0.07em',
-  fontWeight: '900'
+  fontWeight: '950',
+  textAlign: 'center'
 }
 
 const sectionTitleStyle = {
@@ -1877,6 +1808,15 @@ const paragraphStyle = {
   color: '#5c4632',
   fontSize: '1rem',
   lineHeight: '1.7'
+}
+
+const guideGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+  gap: '16px',
+  margin: '28px auto 0',
+  maxWidth: '880px',
+  justifyContent: 'center'
 }
 
 const smallCardStyle = {
@@ -1902,13 +1842,6 @@ const smallCardTextStyle = {
   fontSize: '0.94rem'
 }
 
-const metricGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-  gap: '12px',
-  marginTop: '18px'
-}
-
 const centerButtonRowStyle = {
   display: 'flex',
   justifyContent: 'center',
@@ -1919,7 +1852,6 @@ const centerButtonRowStyle = {
 }
 
 const primaryButtonStyle = {
-  marginTop: '26px',
   border: '0',
   borderRadius: '999px',
   padding: '13px 24px',
@@ -1939,6 +1871,437 @@ const secondaryButtonStyle = {
   background: 'rgba(255, 255, 255, 0.68)',
   color: '#5c3512',
   fontWeight: '850'
+}
+
+const metricGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+  gap: '12px',
+  marginTop: '18px'
+}
+
+const metricCardStyle = {
+  padding: '18px',
+  borderRadius: '22px',
+  background: 'rgba(255, 255, 255, 0.6)',
+  border: '1px solid rgba(139, 92, 40, 0.16)'
+}
+
+const metricValueStyle = {
+  display: 'block',
+  color: '#5c3512',
+  fontSize: '1.55rem',
+  lineHeight: '1.1',
+  overflowWrap: 'anywhere'
+}
+
+const metricTitleStyle = {
+  color: '#6b5540',
+  fontSize: '0.9rem',
+  fontWeight: '650'
+}
+
+const cardGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+  gap: '14px',
+  marginTop: '24px'
+}
+
+const problemSelectCardStyle = {
+  padding: '18px',
+  minHeight: '180px',
+  borderRadius: '24px',
+  textAlign: 'left',
+  cursor: 'pointer',
+  color: '#3b2817'
+}
+
+const cardTypeStyle = {
+  margin: '12px 0 0',
+  color: '#9a6a22',
+  fontSize: '0.82rem',
+  fontWeight: '800'
+}
+
+const warningTextStyle = {
+  margin: '12px 0 0',
+  color: '#7f1d1d',
+  lineHeight: '1.6',
+  textAlign: 'center',
+  fontWeight: '750'
+}
+
+const errorTextStyle = {
+  margin: '12px 0 0',
+  color: '#991b1b',
+  lineHeight: '1.6',
+  fontWeight: '750'
+}
+
+const gameShellStyle = {
+  minHeight: '720px',
+  padding: '34px',
+  display: 'grid',
+  gridTemplateColumns: 'minmax(300px, 0.85fr) minmax(320px, 1.15fr)',
+  gap: '28px',
+  alignItems: 'start',
+  borderRadius: '38px',
+  background:
+    'linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(232, 214, 170, 0.72))',
+  border: '1px solid rgba(139, 92, 40, 0.22)',
+  boxShadow: '0 30px 80px rgba(80, 52, 20, 0.2)',
+  backdropFilter: 'blur(20px)',
+  WebkitBackdropFilter: 'blur(20px)',
+  overflow: 'hidden'
+}
+
+const currentPromptStyle = {
+  marginTop: '18px',
+  padding: '22px',
+  borderRadius: '26px',
+  background:
+    'linear-gradient(135deg, rgba(92, 53, 18, 0.96), rgba(154, 106, 34, 0.9))',
+  color: '#fff8eb',
+  boxShadow: '0 18px 42px rgba(92, 53, 18, 0.22)'
+}
+
+const promptTitleStyle = {
+  margin: '0 0 12px',
+  fontSize: '1.25rem',
+  lineHeight: '1.35'
+}
+
+const promptTextStyle = {
+  margin: '0 0 12px',
+  lineHeight: '1.6',
+  color: 'rgba(255, 248, 235, 0.9)'
+}
+
+const promptQuestionStyle = {
+  margin: '0',
+  lineHeight: '1.6',
+  color: '#f4d28a',
+  fontWeight: '750'
+}
+
+const transparentCardButtonStyle = {
+  width: '100%',
+  border: '0',
+  padding: '0',
+  background: 'transparent',
+  cursor: 'pointer',
+  textAlign: 'left',
+  marginTop: '20px'
+}
+
+const problemCardVisualStyle = {
+  position: 'relative',
+  minHeight: '510px',
+  borderRadius: '30px',
+  overflow: 'hidden',
+  boxShadow: '0 28px 60px rgba(0, 0, 0, 0.26)',
+  transform: 'rotate(-1.5deg)'
+}
+
+const cardImageStyle = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover'
+}
+
+const cardOverlayStyle = {
+  position: 'absolute',
+  inset: 0
+}
+
+const cardTextOverlayStyle = {
+  position: 'absolute',
+  left: '24px',
+  right: '24px',
+  bottom: '28px',
+  color: '#fff8eb'
+}
+
+const largeCardTitleStyle = {
+  margin: '0 0 12px',
+  fontSize: '1.75rem',
+  lineHeight: '1.1'
+}
+
+const largeCardTextStyle = {
+  margin: '0',
+  color: 'rgba(255, 248, 235, 0.88)',
+  lineHeight: '1.65'
+}
+
+const solutionBoardStyle = {
+  padding: '24px',
+  borderRadius: '28px',
+  border: '2px dashed rgba(154, 106, 34, 0.38)',
+  boxShadow: '0 18px 42px rgba(80, 52, 20, 0.12)'
+}
+
+const selectedAiGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+  gap: '12px',
+  marginTop: '16px'
+}
+
+const emptyDropStyle = {
+  padding: '18px',
+  borderRadius: '20px',
+  background: 'rgba(255, 255, 255, 0.58)',
+  color: '#6b5540',
+  lineHeight: '1.55'
+}
+
+const selectedAiCardStyle = {
+  padding: '16px',
+  border: '1px solid rgba(154, 106, 34, 0.3)',
+  borderRadius: '20px',
+  background:
+    'linear-gradient(135deg, rgba(154, 106, 34, 0.96), rgba(92, 53, 18, 0.96))',
+  color: '#fff8eb',
+  textAlign: 'left',
+  cursor: 'pointer'
+}
+
+const selectedAiTypeStyle = {
+  margin: '8px 0 0',
+  lineHeight: '1.5'
+}
+
+const rowBetweenStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '14px',
+  flexWrap: 'wrap'
+}
+
+const textAreaStyle = {
+  width: '100%',
+  minHeight: '150px',
+  marginTop: '14px',
+  padding: '16px',
+  borderRadius: '20px',
+  resize: 'vertical',
+  background: 'rgba(255, 255, 255, 0.78)',
+  color: '#3b2817',
+  outline: 'none',
+  lineHeight: '1.6'
+}
+
+const hintBoxStyle = {
+  marginTop: '18px',
+  padding: '18px',
+  borderRadius: '22px',
+  background: 'rgba(244, 210, 138, 0.24)',
+  border: '1px solid rgba(154, 106, 34, 0.22)'
+}
+
+const aiLibraryStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+  gap: '12px',
+  maxHeight: '620px',
+  overflowY: 'auto',
+  paddingRight: '6px',
+  marginTop: '16px'
+}
+
+const aiCardStyle = {
+  minHeight: '190px',
+  padding: '16px',
+  borderRadius: '22px',
+  cursor: 'pointer',
+  textAlign: 'left',
+  boxShadow: '0 14px 30px rgba(80, 52, 20, 0.1)'
+}
+
+const miniButtonStyle = {
+  border: '1px solid rgba(139, 92, 40, 0.18)',
+  borderRadius: '999px',
+  padding: '8px 12px',
+  cursor: 'pointer',
+  background: 'rgba(255, 255, 255, 0.65)',
+  color: '#5c3512',
+  fontWeight: '800',
+  fontSize: '0.82rem'
+}
+
+const scoreHeroStyle = {
+  marginTop: '24px',
+  padding: '26px',
+  borderRadius: '30px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '18px',
+  flexWrap: 'wrap',
+  background:
+    'linear-gradient(135deg, rgba(92, 53, 18, 0.96), rgba(154, 106, 34, 0.92))',
+  color: '#fff8eb',
+  boxShadow: '0 24px 60px rgba(92, 53, 18, 0.2)'
+}
+
+const scoreCircleStyle = {
+  width: '92px',
+  height: '92px',
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(255, 248, 235, 0.16)',
+  border: '2px solid rgba(244, 210, 138, 0.45)',
+  color: '#f4d28a',
+  fontSize: '2rem',
+  fontWeight: '950'
+}
+
+const scoreTitleStyle = {
+  margin: '0 0 8px',
+  color: '#fff8eb',
+  fontSize: 'clamp(1.6rem, 3vw, 2.4rem)',
+  lineHeight: '1.05',
+  letterSpacing: '-0.05em'
+}
+
+const scoreTextStyle = {
+  margin: 0,
+  color: 'rgba(255, 248, 235, 0.88)',
+  lineHeight: '1.6'
+}
+
+const twoColumnGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+  gap: '16px',
+  marginTop: '18px'
+}
+
+const chipGridStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '8px'
+}
+
+const chipStyle = {
+  display: 'inline-flex',
+  padding: '10px 12px',
+  borderRadius: '999px',
+  background: 'rgba(154, 106, 34, 0.12)',
+  color: '#5c3512',
+  fontSize: '0.88rem',
+  fontWeight: '850'
+}
+
+const subScoreGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+  gap: '12px',
+  marginTop: '16px'
+}
+
+const subScoreCardStyle = {
+  padding: '16px',
+  borderRadius: '18px',
+  background: 'rgba(255, 255, 255, 0.72)',
+  border: '1px solid rgba(139, 92, 40, 0.14)'
+}
+
+const scoreLabelStyle = {
+  color: '#9a6a22',
+  fontWeight: '900'
+}
+
+const progressTrackStyle = {
+  width: '100%',
+  height: '9px',
+  margin: '12px 0',
+  borderRadius: '999px',
+  background: 'rgba(139, 92, 40, 0.16)',
+  overflow: 'hidden'
+}
+
+const progressFillStyle = {
+  height: '100%',
+  borderRadius: '999px',
+  background: 'linear-gradient(135deg, #9a6a22, #5c3512)'
+}
+
+const listStyle = {
+  margin: '0',
+  paddingLeft: '20px',
+  color: '#5c4632',
+  lineHeight: '1.8'
+}
+
+const listGridStyle = {
+  display: 'grid',
+  gap: '12px',
+  marginTop: '12px'
+}
+
+const subHeadingStyle = {
+  margin: '34px 0 16px',
+  color: '#5c3512',
+  fontSize: '1.6rem'
+}
+
+const coinBadgeStyle = {
+  height: 'fit-content',
+  padding: '10px 14px',
+  borderRadius: '999px',
+  fontWeight: '900'
+}
+
+const dateTextStyle = {
+  margin: '10px 0 0',
+  color: '#6b5540',
+  fontSize: '0.85rem'
+}
+
+const certificatePreviewStyle = {
+  marginTop: '28px',
+  padding: '42px',
+  borderRadius: '30px',
+  textAlign: 'center',
+  background:
+    'linear-gradient(135deg, rgba(92, 53, 18, 0.98), rgba(154, 106, 34, 0.94))',
+  color: '#fff8eb',
+  border: '1px solid rgba(244, 210, 138, 0.35)',
+  boxShadow: '0 30px 80px rgba(92, 53, 18, 0.22)'
+}
+
+const certificateTitleStyle = {
+  margin: '0 auto 12px',
+  maxWidth: '760px',
+  color: '#fff8eb',
+  fontSize: 'clamp(2rem, 4vw, 3.6rem)',
+  lineHeight: '1',
+  letterSpacing: '-0.06em'
+}
+
+const certificateTextStyle = {
+  margin: '0 auto 18px',
+  maxWidth: '780px',
+  color: 'rgba(255, 248, 235, 0.88)',
+  lineHeight: '1.7'
+}
+
+const certificateNameStyle = {
+  margin: '28px auto',
+  padding: '18px',
+  maxWidth: '520px',
+  borderTop: '1px solid rgba(244, 210, 138, 0.45)',
+  borderBottom: '1px solid rgba(244, 210, 138, 0.45)',
+  color: '#f4d28a',
+  fontSize: '2rem',
+  fontWeight: '900'
 }
 
 export default GameHome
