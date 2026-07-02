@@ -25,10 +25,33 @@ import AccessibilityScreen from './game/AccessibilityScreen'
 import CardDesignShowcaseScreen from './game/CardDesignShowcaseScreen'
 import MultiplayerHubScreen from './game/MultiplayerHubScreen'
 import RewardsLaunchScreen from './game/RewardsLaunchScreen'
+import { seedAiCards } from '../utils/seedAiCards'
+import { seedProblemCards } from '../utils/seedProblemCards'
+import { seedPhaseThreeCollections } from '../utils/seedPhaseThreeCollections'
 
 function createRound(cards) {
   if (!cards.length) return { card: null }
   return { card: cards[Math.floor(Math.random() * cards.length)] }
+}
+
+async function handleSeedPhaseThreeCollections() {
+  try {
+    const count = await seedPhaseThreeCollections()
+    alert(`${count} Phase 2 and Phase 3 collections created in Firestore.`)
+  } catch (error) {
+    console.error(error)
+    alert('Phase 2 and Phase 3 collection upload failed. Check the console.')
+  }
+}
+
+async function handleSeedProblemCards() {
+  try {
+    const count = await seedProblemCards()
+    alert(`${count} problem cards uploaded to Firestore.`)
+  } catch (error) {
+    console.error(error)
+    alert('Problem cards upload failed. Check the console.')
+  }
 }
 
 function countWords(text) {
@@ -277,19 +300,30 @@ function GameHome({ currentUser }) {
     setAccessibilitySettings((previous) => ({ ...previous, [key]: value }))
   }
 
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow
+useEffect(() => {
+  const originalOverflow = document.body.style.overflow
 
-    if (sidebarOpen) {
-      document.body.style.overflow = 'hidden'
-    }
+  if (sidebarOpen) {
+    document.body.style.overflow = 'hidden'
+  }
 
-    return () => {
-      document.body.style.overflow = originalOverflow
-    }
-  }, [sidebarOpen])
+  return () => {
+    document.body.style.overflow = originalOverflow
+  }
+}, [sidebarOpen])
+
 
   const journeyActive = ['intro', 'select', 'play', 'score'].includes(screen)
+
+  async function handleSeedAiCards() {
+  try {
+    const count = await seedAiCards()
+    alert(`${count} AI cards uploaded to Firestore.`)
+  } catch (error) {
+    console.error(error)
+    alert('AI cards upload failed. Check the console.')
+  }
+}
 
   return (
     <section style={gameHomeWrapperStyle} className={accessibilitySettings.highContrast ? 'glaHighContrast' : ''}>

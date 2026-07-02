@@ -124,7 +124,7 @@ function PlayerApp() {
             {currentUser ? 'Logout' : 'Login'}
           </button>
 
-          {!currentUser && (
+ {!currentUser && (
             <button onClick={handleStartQuest} className="startButton">
               Start Quest
             </button>
