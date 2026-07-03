@@ -34,8 +34,10 @@ import {
   startGameSession
 } from '../services/player/playerJourneyService'
 import { getPlayerDashboardData } from '../services/player/playerDashboardService'
-import { updatePlayerProfile } from '../services/player/playerProfileService'
-import { getPlayerAnalyticsData } from '../services/player/playerAnalyticsService'
+import {
+  ensurePlayerProfile,
+  updatePlayerProfile
+} from '../services/player/playerProfileService'
 import { seedRemainingCollections } from '../utils/seedRemainingCollections'
 
 function createRound(cards) {
@@ -406,12 +408,31 @@ const coinTransaction = {
   function updateAccessibilitySetting(key, value) {
     setAccessibilitySettings((previous) => ({ ...previous, [key]: value }))
   }
+
+
 useEffect(() => {
-  if (screen === 'dashboard' || screen === 'profile' || screen === 'certificate') {
+  if (!currentUser?.uid) {
+    setDashboardData(null)
+    setAttempts([])
+    setCoinTransactions([])
+    setGlaCoinBalance(0)
+    setSelectedProblemIds([])
+    setActiveProblemStackId('')
+    setActiveSessionId('')
+    return
+  }
+
+  loadPlayerDashboard()
+}, [currentUser?.uid])
+
+useEffect(() => {
+  if (
+    currentUser?.uid &&
+    (screen === 'dashboard' || screen === 'profile' || screen === 'certificate')
+  ) {
     loadPlayerDashboard()
   }
 }, [screen, currentUser?.uid])
-
 useEffect(() => {
   if (screen === 'analytics') {
     loadPlayerAnalytics()
@@ -476,11 +497,40 @@ async function loadPlayerDashboard() {
   setDashboardError('')
 
   try {
+    await ensurePlayerProfile({
+      userId: currentUser.uid,
+      firstName: currentUser.displayName?.split(' ')[0] || '',
+      lastName: currentUser.displayName?.split(' ').slice(1).join(' ') || '',
+      email: currentUser.email || ''
+    })
+
     const data = await getPlayerDashboardData(currentUser.uid)
+
     setDashboardData(data)
 
-    if (data?.glaCoinBalance !== undefined) {
-      setGlaCoinBalance(data.glaCoinBalance)
+    setAttempts(data?.attempts || [])
+    setCoinTransactions(data?.coinTransactions || [])
+    setGlaCoinBalance(toSafeNumber(data?.glaCoinBalance))
+
+    const stackIds = data?.selectedProblemStack?.selectedProblemIds || []
+
+    if (stackIds.length > 0) {
+      const normalisedStackIds = stackIds.map((id) => {
+        const numberId = Number(id)
+        return Number.isFinite(numberId) ? numberId : id
+      })
+
+      setSelectedProblemIds(normalisedStackIds)
+    }
+
+    if (data?.selectedProblemStack?.id || data?.selectedProblemStack?.selectedProblemStackId) {
+      setActiveProblemStackId(
+        data.selectedProblemStack.selectedProblemStackId || data.selectedProblemStack.id
+      )
+    }
+
+    if (data?.profile?.activeSessionId) {
+      setActiveSessionId(data.profile.activeSessionId)
     }
   } catch (error) {
     console.error(error)
@@ -678,9 +728,9 @@ async function loadPlayerAnalytics() {
             aiError={aiError}
             hintMessage={hintMessage}
             showHintConfirm={showHintConfirm}
-            glaCoinBalance={glaCoinBalance}
-            certificationProgress={certificationProgress}
-            averageScore={averageScore}
+glaCoinBalance={firestoreGlaCoinBalance}
+certificationProgress={firestoreCertificationProgress}
+averageScore={firestoreAverageScore}
             fullName={fullName}
             card1={card1}
             card2={card2}
@@ -766,12 +816,12 @@ async function loadPlayerAnalytics() {
 
         {screen === 'coins' && (
           <CoinHistoryScreen
-            glaCoinBalance={firestoreGlaCoinBalance}
-            totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
-            glaCoinSpentOnHints={dashboardData?.glaCoinSpentOnHints ?? glaCoinSpentOnHints}
-            coinTransactions={coinTransactions}
-            onBackToDashboard={() => setScreen('dashboard')}
-          />
+  glaCoinBalance={firestoreGlaCoinBalance}
+  totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
+  glaCoinSpentOnHints={dashboardData?.glaCoinSpentOnHints ?? glaCoinSpentOnHints}
+  coinTransactions={dashboardData?.coinTransactions || coinTransactions}
+  onBackToDashboard={() => setScreen('dashboard')}
+/>
         )}
 
         {screen === 'certificate' && (
@@ -845,18 +895,18 @@ async function loadPlayerAnalytics() {
 
         {screen === 'leaderboard' && (
           <LeaderboardScreen
-            fullName={firestoreFullName || fullName}
-            averageScore={firestoreAverageScore}
-            completedProblems={firestoreCompletedProblems}
-            totalGlaCoinEarned={totalGlaCoinEarned}
-          />
+  fullName={firestoreFullName || fullName}
+  averageScore={firestoreAverageScore}
+  completedProblems={firestoreCompletedProblems}
+  totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
+/>
         )}
 
         {screen === 'hints' && (
-          <HintCenterScreen
-            coinTransactions={coinTransactions}
-            glaCoinSpentOnHints={glaCoinSpentOnHints}
-          />
+         <HintCenterScreen
+  coinTransactions={dashboardData?.coinTransactions || coinTransactions}
+  glaCoinSpentOnHints={dashboardData?.glaCoinSpentOnHints ?? glaCoinSpentOnHints}
+/>
         )}
 
         {screen === 'analytics' && (
@@ -902,10 +952,10 @@ async function loadPlayerAnalytics() {
 
         {screen === 'rewards' && (
           <RewardsLaunchScreen
-            completedProblems={completedProblems}
-            averageScore={averageScore}
-            certificateUnlocked={certificateUnlocked}
-          />
+  completedProblems={firestoreCompletedProblems}
+  averageScore={firestoreAverageScore}
+  certificateUnlocked={firestoreCertificateUnlocked}
+/>
         )}
       </main>
     </section>
