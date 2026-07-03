@@ -18,40 +18,18 @@ import PlayerProfileScreen from './game/PlayerProfileScreen'
 import AchievementsBadgesScreen from './game/AchievementsBadgesScreen'
 import LevelsProgressionScreen from './game/LevelsProgressionScreen'
 import LeaderboardScreen from './game/LeaderboardScreen'
-import HintCenterScreen from './game/HintCenterScreen'
 import AnalyticsDashboardScreen from './game/AnalyticsDashboardScreen'
 import MultilingualScreen from './game/MultilingualScreen'
 import AccessibilityScreen from './game/AccessibilityScreen'
 import CardDesignShowcaseScreen from './game/CardDesignShowcaseScreen'
 import MultiplayerHubScreen from './game/MultiplayerHubScreen'
 import RewardsLaunchScreen from './game/RewardsLaunchScreen'
-import { seedAiCards } from '../utils/seedAiCards'
-import { seedProblemCards } from '../utils/seedProblemCards'
-import { seedPhaseThreeCollections } from '../utils/seedPhaseThreeCollections'
+import { usePlayerLanguage } from '../hooks/usePlayerLanguage'
+import { DEFAULT_PLAYER_SETTINGS } from '../services/player/playerSettingsService'
 
 function createRound(cards) {
   if (!cards.length) return { card: null }
   return { card: cards[Math.floor(Math.random() * cards.length)] }
-}
-
-async function handleSeedPhaseThreeCollections() {
-  try {
-    const count = await seedPhaseThreeCollections()
-    alert(`${count} Phase 2 and Phase 3 collections created in Firestore.`)
-  } catch (error) {
-    console.error(error)
-    alert('Phase 2 and Phase 3 collection upload failed. Check the console.')
-  }
-}
-
-async function handleSeedProblemCards() {
-  try {
-    const count = await seedProblemCards()
-    alert(`${count} problem cards uploaded to Firestore.`)
-  } catch (error) {
-    console.error(error)
-    alert('Problem cards upload failed. Check the console.')
-  }
 }
 
 function countWords(text) {
@@ -91,6 +69,7 @@ function generateBasicHint(problemCard) {
 
 function GameHome({ currentUser }) {
   const cards = problemCards.cards || []
+  const { t } = usePlayerLanguage()
 
   const [screen, setScreen] = useState('intro')
   const [selectedProblemIds, setSelectedProblemIds] = useState([])
@@ -109,7 +88,7 @@ function GameHome({ currentUser }) {
   const [showHintConfirm, setShowHintConfirm] = useState(false)
   const [isChanging, setIsChanging] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [accessibilitySettings, setAccessibilitySettings] = useState({ highContrast: false, lowBandwidth: false, keyboardMode: true, screenReaderLabels: true, mobileOptimized: true })
+  const [accessibilitySettings, setAccessibilitySettings] = useState(DEFAULT_PLAYER_SETTINGS)
 
   const fullName = useMemo(() => currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Player', [currentUser])
   const firstName = fullName.split(' ')[0]
@@ -248,7 +227,13 @@ function GameHome({ currentUser }) {
   }
 
   function toggleAiFlip(cardId) {
+    if (!accessibilitySettings.cardFlipEnabled) return
     setFlippedAiCards((previousIds) => previousIds.includes(cardId) ? previousIds.filter((id) => id !== cardId) : [...previousIds, cardId])
+  }
+
+  function toggleProblemFlip() {
+    if (!accessibilitySettings.cardFlipEnabled) return
+    setFlippedProblem((previous) => !previous)
   }
 
   async function submitExplanation() {
@@ -262,7 +247,7 @@ function GameHome({ currentUser }) {
     setAiError('')
     setAiLoading(true)
     try {
-      const selectedSolutionForCurrentBackend = { cardId: selectedAiCards[0].id, title: selectedAiCards.map((card) => card.title).join(' + '), description: selectedAiCards.map((card) => `${card.title}: ${card.canDo}`).join('\n') }
+      const selectedSolutionForCurrentBackend = { cardId: selectedAiCards[0].id, title: selectedAiCards.map((card) => card.title).join(' + '), description: selectedAiCards.map((card) => `${card.title}: ${card.canDo || card.what_it_can_do || ''}`).join('\n') }
       const result = await gradeExplanation({ problemCard: round.card, selectedSolution: selectedSolutionForCurrentBackend, selectedAiCards, userExplanation: trimmedExplanation })
       const normalisedResult = normaliseAiResult(result)
       const createdAt = new Date().toLocaleString()
@@ -300,37 +285,34 @@ function GameHome({ currentUser }) {
     setAccessibilitySettings((previous) => ({ ...previous, [key]: value }))
   }
 
-useEffect(() => {
-  const originalOverflow = document.body.style.overflow
-
-  if (sidebarOpen) {
-    document.body.style.overflow = 'hidden'
+  function handleSettingsSaved(nextSettings) {
+    setAccessibilitySettings(nextSettings)
   }
 
-  return () => {
-    document.body.style.overflow = originalOverflow
-  }
-}, [sidebarOpen])
-
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow
+    if (sidebarOpen) document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [sidebarOpen])
 
   const journeyActive = ['intro', 'select', 'play', 'score'].includes(screen)
-
-  async function handleSeedAiCards() {
-  try {
-    const count = await seedAiCards()
-    alert(`${count} AI cards uploaded to Firestore.`)
-  } catch (error) {
-    console.error(error)
-    alert('AI cards upload failed. Check the console.')
-  }
-}
+  const gameHomeClassName = [
+    accessibilitySettings.highContrast ? 'glaHighContrast' : '',
+    accessibilitySettings.largeText ? 'glaLargeText' : '',
+    accessibilitySettings.reduceMotion ? 'glaReduceMotion' : '',
+    accessibilitySettings.lowBandwidth || accessibilitySettings.saveDataMode ? 'glaLowBandwidth' : '',
+    accessibilitySettings.compactCards ? 'glaCompactCards' : '',
+    accessibilitySettings.showCardImages ? '' : 'glaHideCardImages'
+  ].filter(Boolean).join(' ')
 
   return (
-    <section style={gameHomeWrapperStyle} className={accessibilitySettings.highContrast ? 'glaHighContrast' : ''}>
+    <section style={gameHomeWrapperStyle} className={gameHomeClassName}>
       <style>{pageCss}</style>
       <div className="glaGamePageHeader">
-        <button type="button" onClick={() => setSidebarOpen(true)} className="glaMenuButton"><span className="glaMenuIcon">☰</span> Menu</button>
-        <p className="glaPageTitle">GRIT Lab Africa AI for SDGs Card Game</p>
+        <button type="button" onClick={() => setSidebarOpen(true)} className="glaMenuButton"><span className="glaMenuIcon">☰</span> {t('menu')}</button>
+        <p className="glaPageTitle">{t('gameTitle')}</p>
       </div>
       <div className={`glaSidebarOverlay ${sidebarOpen ? 'open' : ''}`}>
         <button type="button" aria-label="Close menu" className="glaSidebarBackdrop" onClick={() => setSidebarOpen(false)}></button>
@@ -342,7 +324,7 @@ useEffect(() => {
         {journeyActive && <JourneyTabs screen={screen} selectedProblemCount={selectedProblemIds.length} roundActive={Boolean(round.card)} latestAttempt={latestAttempt} onNavigate={handleJourneyNavigation} />}
         {screen === 'intro' && <GameGuideScreen firstName={firstName} onChooseProblems={() => setScreen('select')} />}
         {screen === 'select' && <ProblemSelectionScreen cards={cards} selectedProblemIds={selectedProblemIds} onToggleProblem={toggleProblemCard} onStartGame={startGame} />}
-        {screen === 'play' && <PlayGameScreen round={round} aiCards={aiCards} selectedAiCards={selectedAiCards} flippedProblem={flippedProblem} flippedAiCards={flippedAiCards} userExplanation={userExplanation} wordCount={wordCount} explanationTooLong={explanationTooLong} hasSubmittedExplanation={hasSubmittedExplanation} aiLoading={aiLoading} aiError={aiError} hintMessage={hintMessage} showHintConfirm={showHintConfirm} glaCoinBalance={glaCoinBalance} certificationProgress={certificationProgress} averageScore={averageScore} fullName={fullName} card1={card1} card2={card2} isChanging={isChanging} onToggleProblemFlip={() => setFlippedProblem(!flippedProblem)} onToggleAiCard={toggleAiCard} onRemoveSelectedAiCard={removeSelectedAiCard} onToggleAiFlip={toggleAiFlip} onDragStart={handleDragStart} onDrop={handleDrop} onExplanationChange={setUserExplanation} onSubmit={submitExplanation} onShowHintConfirm={() => setShowHintConfirm(true)} onCancelHint={() => setShowHintConfirm(false)} onConfirmHint={confirmHintPurchase} onOpenLatestScore={() => setScreen('score')} onNextRound={handleNextRound} latestAttempt={latestAttempt} onGoToSelection={() => setScreen('select')} />}
+        {screen === 'play' && <PlayGameScreen round={round} aiCards={aiCards} selectedAiCards={selectedAiCards} flippedProblem={flippedProblem} flippedAiCards={flippedAiCards} userExplanation={userExplanation} wordCount={wordCount} explanationTooLong={explanationTooLong} hasSubmittedExplanation={hasSubmittedExplanation} aiLoading={aiLoading} aiError={aiError} hintMessage={hintMessage} showHintConfirm={showHintConfirm} glaCoinBalance={glaCoinBalance} certificationProgress={certificationProgress} averageScore={averageScore} fullName={fullName} card1={card1} card2={card2} isChanging={isChanging} onToggleProblemFlip={toggleProblemFlip} onToggleAiCard={toggleAiCard} onRemoveSelectedAiCard={removeSelectedAiCard} onToggleAiFlip={toggleAiFlip} onDragStart={handleDragStart} onDrop={handleDrop} onExplanationChange={setUserExplanation} onSubmit={submitExplanation} onShowHintConfirm={() => setShowHintConfirm(true)} onCancelHint={() => setShowHintConfirm(false)} onConfirmHint={confirmHintPurchase} onOpenLatestScore={() => setScreen('score')} onNextRound={handleNextRound} latestAttempt={latestAttempt} onGoToSelection={() => setScreen('select')} appSettings={accessibilitySettings} />}
         {screen === 'score' && <ScoringFeedbackScreen currentAttempt={latestAttempt} currentProblem={round.card} currentProblemAttemptStats={latestAttemptProblemStats} glaCoinBalance={glaCoinBalance} onOpenRetry={() => setScreen('retry')} onNextProblem={handleNextRound} onOpenDashboard={() => setScreen('dashboard')} onOpenCoinHistory={() => setScreen('coins')} />}
         {screen === 'retry' && <RetryAttemptScreen currentProblem={round.card} currentProblemAttemptStats={currentProblemAttemptStats} onStartRetry={handleRetryCurrentProblem} onCancel={() => setScreen(latestAttempt ? 'score' : 'play')} onNextProblem={handleNextRound} />}
         {screen === 'dashboard' && <PlayerDashboardScreen firstName={firstName} selectedProblemStack={activeProblemStack} completedProblemRows={completedProblemRows} completedProblems={completedProblems} averageScore={averageScore} certificateUnlocked={certificateUnlocked} certificationProgress={certificationProgress} glaCoinBalance={glaCoinBalance} totalGlaCoinEarned={totalGlaCoinEarned} glaCoinSpentOnHints={glaCoinSpentOnHints} attempts={attempts} attemptStatsByProblem={attemptStatsByProblem} bestScoringProblems={bestScoringProblems} latestAttempt={latestAttempt} onOpenCoinHistory={() => setScreen('coins')} onOpenLatestScore={() => setScreen(latestAttempt ? 'score' : 'play')} onOpenCertificate={() => setScreen('certificate')} onOpenProfile={() => setScreen('profile')} />}
@@ -352,13 +334,12 @@ useEffect(() => {
         {screen === 'achievements' && <AchievementsBadgesScreen attempts={attempts} completedProblems={completedProblems} totalGlaCoinEarned={totalGlaCoinEarned} />}
         {screen === 'levels' && <LevelsProgressionScreen totalGlaCoinEarned={totalGlaCoinEarned} completedProblems={completedProblems} averageScore={averageScore} />}
         {screen === 'leaderboard' && <LeaderboardScreen fullName={fullName} averageScore={averageScore} completedProblems={completedProblems} totalGlaCoinEarned={totalGlaCoinEarned} />}
-        {screen === 'hints' && <HintCenterScreen coinTransactions={coinTransactions} glaCoinSpentOnHints={glaCoinSpentOnHints} />}
         {screen === 'analytics' && <AnalyticsDashboardScreen cards={cards} attempts={attempts} selectedProblemStack={activeProblemStack} coinTransactions={coinTransactions} completedProblems={completedProblems} certificateUnlocked={certificateUnlocked} />}
         {screen === 'multilingual' && <MultilingualScreen />}
-        {screen === 'accessibility' && <AccessibilityScreen settings={accessibilitySettings} onChange={updateAccessibilitySetting} />}
+        {screen === 'accessibility' && <AccessibilityScreen settings={accessibilitySettings} onChange={updateAccessibilitySetting} onSaved={handleSettingsSaved} />}
         {screen === 'designs' && <CardDesignShowcaseScreen problemCardBack={card2} aiCardBack={card1} cards={cards} aiCards={aiCards} />}
-        {screen === 'multiplayer' && <MultiplayerHubScreen />}
-        {screen === 'rewards' && <RewardsLaunchScreen />}
+        {screen === 'multiplayer' && <MultiplayerHubScreen fullName={fullName} />}
+        {screen === 'rewards' && <RewardsLaunchScreen completedProblems={completedProblems} averageScore={averageScore} certificateUnlocked={certificateUnlocked} />}
       </main>
     </section>
   )
@@ -372,42 +353,12 @@ const pageCss = `
   .glaPageTitle { margin:0; color:#5c3512; font-size:0.9rem; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; }
   .glaSidebarOverlay { position:fixed; inset:0; z-index:9999; pointer-events:none; overflow:hidden; }
   .glaSidebarOverlay.open { pointer-events:auto; }
-  .glaSidebarBackdrop {
-            position: fixed;
-            inset: 0;
-            border: 0;
-            padding: 0;
-            cursor: pointer;
-            background: rgba(20, 13, 8, 0);
-            backdrop-filter: blur(0);
-            -webkit-backdrop-filter: blur(0);
-            transition:
-              background 0.28s ease,
-              backdrop-filter 0.28s ease,
-              -webkit-backdrop-filter 0.28s ease;
-          }
-  .glaSidebarOverlay.open .glaSidebarBackdrop {
-            background: rgba(20, 13, 8, 0.42);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-          }
-  .glaSidebarDrawer {
-            position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            height: 100dvh;
-            width: min(360px, 90vw);
-            z-index: 2;
-            transform: translateX(-105%);
-            transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
-            will-change: transform;
-          }
-  .glaSidebarOverlay.open .glaSidebarDrawer {
-            transform: translateX(0);
-          }
+  .glaSidebarBackdrop { position: fixed; inset: 0; border: 0; padding: 0; cursor: pointer; background: rgba(20, 13, 8, 0); backdrop-filter: blur(0); -webkit-backdrop-filter: blur(0); transition: background 0.28s ease, backdrop-filter 0.28s ease, -webkit-backdrop-filter 0.28s ease; }
+  .glaSidebarOverlay.open .glaSidebarBackdrop { background: rgba(20, 13, 8, 0.42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .glaSidebarDrawer { position: fixed; top: 0; left: 0; bottom: 0; height: 100dvh; width: min(360px, 90vw); z-index: 2; transform: translateX(-105%); transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
+  .glaSidebarOverlay.open .glaSidebarDrawer { transform: translateX(0); }
   .glaGameContent { width:100%; min-width:0; }
-  .glaJourneyTabs { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:18px; padding:10px; border-radius:26px; background:rgba(255,255,255,0.58); border:1px solid rgba(139,92,40,0.16); box-shadow:0 18px 42px rgba(80,52,20,0.1); -webkit- }
+  .glaJourneyTabs { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:18px; padding:10px; border-radius:26px; background:rgba(255,255,255,0.58); border:1px solid rgba(139,92,40,0.16); box-shadow:0 18px 42px rgba(80,52,20,0.1); }
   .glaJourneyTabButton { border:1px solid rgba(139,92,40,0.14); border-radius:20px; padding:13px 14px; text-align:left; cursor:pointer; background:rgba(255,255,255,0.62); color:#5c3512; transition:transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
   .glaJourneyTabButton:hover { transform:translateY(-2px); border-color:rgba(154,106,34,0.35); box-shadow:0 14px 28px rgba(80,52,20,0.12); }
   .glaJourneyTabButton.active { background:linear-gradient(135deg,#9a6a22,#5c3512); color:#fff8eb; border-color:rgba(244,210,138,0.4); box-shadow:0 18px 36px rgba(92,53,18,0.22); }
@@ -416,7 +367,11 @@ const pageCss = `
   .glaJourneyTabLabel { display:block; font-size:0.92rem; font-weight:900; line-height:1.2; }
   .glaJourneyTabDescription { display:block; margin-top:4px; font-size:0.72rem; font-weight:750; color:rgba(92,53,18,0.65); }
   .glaJourneyTabButton.active .glaJourneyTabDescription { color:rgba(255,248,235,0.72); }
-  .glaHighContrast { filter: contrast(1.06); }
+  .glaHighContrast { filter: contrast(1.08); }
+  .glaLargeText { font-size: 1.08rem; }
+  .glaReduceMotion *, .glaReduceMotion *::before, .glaReduceMotion *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  .glaLowBandwidth img, .glaHideCardImages img { filter: saturate(0.75); }
+  .glaCompactCards article, .glaCompactCards .smallCard { padding: 14px !important; }
   @media (max-width: 980px) { .glaJourneyTabs { grid-template-columns:repeat(2,minmax(0,1fr)); } .gameShell { grid-template-columns: 1fr !important; } }
   @media (max-width: 520px) { .glaGamePageHeader { align-items:flex-start; flex-direction:column; } .glaJourneyTabs { grid-template-columns:1fr; } }
 `

@@ -2,216 +2,157 @@ import { useEffect, useMemo, useState } from 'react'
 import { styles } from '../game/gameStyles'
 import { Pill, SectionHeader } from '../game/ui'
 import {
-  addAdminLanguageVersion,
-  deleteAdminLanguageVersion,
-  getAdminLanguageVersions,
-  seedStarterLanguageVersions,
-  updateAdminLanguageStatus
-} from '../../services/admin/adminTranslationService'
+  deleteLanguageVersion,
+  getLanguages,
+  saveLanguageVersion,
+  seedStarterLanguages,
+  updateLanguageStatus
+} from '../../services/admin/adminLocalizationService'
+import {
+  Field,
+  MessageCard,
+  SearchBox,
+  SimpleTable,
+  StatusPill,
+  dangerButtonStyle,
+  inputStyle,
+  primaryButtonStyle,
+  secondaryButtonStyle
+} from './shared/AdminFeatureUi'
 
 const emptyForm = {
   languageName: '',
   languageCode: '',
-  deckStatus: 'Planning',
+  deckStatus: 'Draft',
   reviewer: '',
-  order: ''
+  order: '',
+  isActive: true
 }
 
 function AdminLanguageManagementScreen() {
-  const [languages, setLanguages] = useState([])
-  const [formValues, setFormValues] = useState(emptyForm)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [rows, setRows] = useState([])
+  const [form, setForm] = useState(emptyForm)
+  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [activeFilter, setActiveFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [seeding, setSeeding] = useState(false)
-  const [updatingId, setUpdatingId] = useState('')
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
 
-  async function loadLanguages() {
+  async function load() {
     setLoading(true)
     setError('')
 
     try {
-      const rows = await getAdminLanguageVersions()
-      setLanguages(rows)
+      setRows(await getLanguages())
     } catch (err) {
-      setError(err.message || 'Could not load language versions from Firebase.')
+      setError(err.message || 'Could not load languages from Firebase.')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadLanguages()
+    load()
   }, [])
 
-  const filteredLanguages = useMemo(() => {
-    const cleanSearch = searchTerm.trim().toLowerCase()
+  const filteredRows = useMemo(() => {
+    const term = search.trim().toLowerCase()
 
-    return languages.filter((language) => {
-      const searchableText = [
-        language.languageName,
-        language.languageCode,
-        language.deckStatus,
-        language.reviewer
-      ]
-        .join(' ')
-        .toLowerCase()
-
-      const matchesSearch = !cleanSearch || searchableText.includes(cleanSearch)
-
-      const matchesStatus =
-        statusFilter === 'all' ||
-        String(language.deckStatus || '').toLowerCase() ===
-          statusFilter.toLowerCase()
-
-      const matchesActive =
-        activeFilter === 'all' ||
-        (activeFilter === 'active' && language.isActive) ||
-        (activeFilter === 'inactive' && !language.isActive)
-
-      return matchesSearch && matchesStatus && matchesActive
+    return rows.filter((row) => {
+      const searchable = [row.languageName, row.languageCode, row.deckStatus, row.reviewer].join(' ').toLowerCase()
+      const matchesSearch = !term || searchable.includes(term)
+      const matchesStatus = statusFilter === 'all' || String(row.deckStatus).toLowerCase() === statusFilter
+      return matchesSearch && matchesStatus
     })
-  }, [languages, searchTerm, statusFilter, activeFilter])
+  }, [rows, search, statusFilter])
 
-  function updateFormField(field, value) {
-    setFormValues((previousValues) => ({
-      ...previousValues,
-      [field]: value
-    }))
-  }
-
-  async function handleCreateStarterLanguages() {
-    const confirmed = window.confirm(
-      'Create or update starter language versions in Firebase?'
-    )
-
-    if (!confirmed) return
-
-    setSeeding(true)
-    setError('')
-    setSuccessMessage('')
-
-    try {
-      const count = await seedStarterLanguageVersions()
-      setSuccessMessage(`${count} starter language versions saved.`)
-      await loadLanguages()
-    } catch (err) {
-      setError(err.message || 'Could not create starter language versions.')
-    } finally {
-      setSeeding(false)
-    }
-  }
-
-  async function handleAddLanguage(event) {
+  async function submit(event) {
     event.preventDefault()
     setSaving(true)
     setError('')
-    setSuccessMessage('')
+    setMessage('')
 
     try {
-      await addAdminLanguageVersion(formValues)
-      setFormValues(emptyForm)
-      setSuccessMessage('Language version saved successfully.')
-      await loadLanguages()
+      await saveLanguageVersion(form)
+      setForm(emptyForm)
+      setMessage('Language saved successfully.')
+      await load()
     } catch (err) {
-      setError(err.message || 'Could not save language version.')
+      setError(err.message || 'Could not save language.')
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleToggleActive(language) {
-    setUpdatingId(language.id)
+  async function seedLanguages() {
+    setSaving(true)
     setError('')
-    setSuccessMessage('')
+    setMessage('')
 
     try {
-      await updateAdminLanguageStatus(language, {
-        isActive: !language.isActive
-      })
-
-      setSuccessMessage('Language status updated successfully.')
-      await loadLanguages()
+      const count = await seedStarterLanguages()
+      setMessage(`${count} starter languages saved.`)
+      await load()
     } catch (err) {
-      setError(err.message || 'Could not update language status.')
+      setError(err.message || 'Could not create starter languages.')
     } finally {
-      setUpdatingId('')
+      setSaving(false)
     }
   }
 
-  async function handleDeleteLanguage(language) {
-    const confirmed = window.confirm(
-      `Delete "${language.languageName}" from Firebase languageVersions?`
-    )
-
-    if (!confirmed) return
-
-    setUpdatingId(language.id)
+  async function toggleActive(row) {
     setError('')
-    setSuccessMessage('')
+    setMessage('')
 
     try {
-      await deleteAdminLanguageVersion(language)
-      setSuccessMessage('Language version deleted successfully.')
-      await loadLanguages()
+      await updateLanguageStatus(row, !row.isActive)
+      setMessage('Language status updated.')
+      await load()
     } catch (err) {
-      setError(err.message || 'Could not delete language version.')
-    } finally {
-      setUpdatingId('')
+      setError(err.message || 'Could not update language status.')
+    }
+  }
+
+  async function remove(row) {
+    if (!window.confirm(`Delete ${row.languageName}?`)) return
+
+    setError('')
+    setMessage('')
+
+    try {
+      await deleteLanguageVersion(row)
+      setMessage('Language deleted.')
+      await load()
+    } catch (err) {
+      setError(err.message || 'Could not delete language.')
     }
   }
 
   return (
     <div style={styles.panel}>
-      <SectionHeader
-        eyebrow="Admin language version management"
-        title="Manage multilingual card decks."
-      >
-        Language versions are loaded from Firebase languageVersions and
-        translation progress is calculated from cardTranslations.
+      <SectionHeader eyebrow="Language management" title="Add languages for the game.">
+        This screen only manages available languages. It does not manage UI translation text.
       </SectionHeader>
 
-      <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
-        <button type="button" onClick={loadLanguages} style={secondaryButtonStyle}>
-          Refresh Languages
-        </button>
-
-        <button
-          type="button"
-          onClick={handleCreateStarterLanguages}
-          disabled={seeding}
-          style={primaryButtonStyle}
-        >
-          {seeding ? 'Creating...' : 'Create Starter Languages'}
-        </button>
-      </div>
-
-      {error && <MessageCard message={error} tone="error" />}
-      {successMessage && <MessageCard message={successMessage} tone="success" />}
+      <MessageCard message={error} tone="error" />
+      <MessageCard message={message} />
 
       <div style={styles.metricGrid}>
         <div style={styles.smallCard}>
           <p style={styles.eyebrow}>Languages</p>
-          <h3 style={styles.smallCardTitle}>{languages.length}</h3>
-          <p style={styles.smallCardText}>Loaded from Firebase.</p>
+          <h3 style={styles.smallCardTitle}>{rows.length}</h3>
+          <p style={styles.smallCardText}>Saved in languageVersions.</p>
         </div>
-
         <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>Active Languages</p>
-          <h3 style={styles.smallCardTitle}>
-            {languages.filter((language) => language.isActive).length}
-          </h3>
-          <p style={styles.smallCardText}>Available for future display.</p>
+          <p style={styles.eyebrow}>Active</p>
+          <h3 style={styles.smallCardTitle}>{rows.filter((row) => row.isActive).length}</h3>
+          <p style={styles.smallCardText}>Shown in the language selector.</p>
         </div>
-
         <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>Filtered Results</p>
-          <h3 style={styles.smallCardTitle}>{filteredLanguages.length}</h3>
-          <p style={styles.smallCardText}>Based on search and filters.</p>
+          <p style={styles.eyebrow}>Filtered results</p>
+          <h3 style={styles.smallCardTitle}>{filteredRows.length}</h3>
+          <p style={styles.smallCardText}>Based on search and status.</p>
         </div>
       </div>
 
@@ -219,87 +160,40 @@ function AdminLanguageManagementScreen() {
         <div style={styles.rowBetween}>
           <div>
             <p style={styles.eyebrow}>Add language</p>
-            <h3 style={styles.smallCardTitle}>Create language version</h3>
+            <h3 style={styles.smallCardTitle}>Create a language option</h3>
           </div>
-          <Pill>languageVersions</Pill>
+          <button type="button" onClick={seedLanguages} disabled={saving} style={secondaryButtonStyle}>
+            Add starter languages
+          </button>
         </div>
 
-        <form onSubmit={handleAddLanguage} style={formGridStyle}>
-          <label style={fieldStyle}>
-            Language name
-            <input
-              value={formValues.languageName}
-              onChange={(event) =>
-                updateFormField('languageName', event.target.value)
-              }
-              placeholder="Example: French"
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={fieldStyle}>
-            Language code
-            <input
-              value={formValues.languageCode}
-              onChange={(event) =>
-                updateFormField('languageCode', event.target.value)
-              }
-              placeholder="Example: fr"
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={fieldStyle}>
-            Deck status
-            <select
-              value={formValues.deckStatus}
-              onChange={(event) =>
-                updateFormField('deckStatus', event.target.value)
-              }
-              style={inputStyle}
-            >
-              <option value="Planning">Planning</option>
+        <form onSubmit={submit} style={formGridStyle}>
+          <Field label="Language name">
+            <input style={inputStyle} value={form.languageName} onChange={(event) => setForm({ ...form, languageName: event.target.value })} placeholder="Example: French" />
+          </Field>
+          <Field label="Language code">
+            <input style={inputStyle} value={form.languageCode} onChange={(event) => setForm({ ...form, languageCode: event.target.value })} placeholder="Example: fr" />
+          </Field>
+          <Field label="Deck status">
+            <select style={inputStyle} value={form.deckStatus} onChange={(event) => setForm({ ...form, deckStatus: event.target.value })}>
               <option value="Draft">Draft</option>
-              <option value="Review">Review</option>
               <option value="Published">Published</option>
+              <option value="Paused">Paused</option>
             </select>
+          </Field>
+          <Field label="Reviewer">
+            <input style={inputStyle} value={form.reviewer} onChange={(event) => setForm({ ...form, reviewer: event.target.value })} placeholder="Example: GRIT Lab Africa" />
+          </Field>
+          <Field label="Display order">
+            <input style={inputStyle} type="number" value={form.order} onChange={(event) => setForm({ ...form, order: event.target.value })} placeholder="Example: 1" />
+          </Field>
+          <label style={checkLabelStyle}>
+            <input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />
+            Active in language selector
           </label>
-
-          <label style={fieldStyle}>
-            Reviewer
-            <input
-              value={formValues.reviewer}
-              onChange={(event) => updateFormField('reviewer', event.target.value)}
-              placeholder="Example: Pending"
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={fieldStyle}>
-            Display order
-            <input
-              value={formValues.order}
-              onChange={(event) => updateFormField('order', event.target.value)}
-              placeholder="Example: 1"
-              type="number"
-              min="1"
-              style={inputStyle}
-            />
-          </label>
-
-          <div style={{ ...styles.centerButtonRow, gridColumn: '1 / -1' }}>
-            <button type="submit" disabled={saving} style={primaryButtonStyle}>
-              {saving ? 'Saving...' : 'Save Language'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setFormValues(emptyForm)}
-              disabled={saving}
-              style={secondaryButtonStyle}
-            >
-              Clear Form
-            </button>
+          <div style={buttonRowStyle}>
+            <button type="submit" disabled={saving} style={compactPrimaryButtonStyle}>{saving ? 'Saving...' : 'Save language'}</button>
+            <button type="button" onClick={() => setForm(emptyForm)} disabled={saving} style={secondaryButtonStyle}>Clear form</button>
           </div>
         </form>
       </div>
@@ -308,254 +202,53 @@ function AdminLanguageManagementScreen() {
         <div style={styles.rowBetween}>
           <div>
             <p style={styles.eyebrow}>Search and filter</p>
-            <h3 style={styles.smallCardTitle}>Find language versions</h3>
+            <h3 style={styles.smallCardTitle}>Language list</h3>
           </div>
-          <Pill>{filteredLanguages.length} results</Pill>
+          <Pill>{filteredRows.length} results</Pill>
         </div>
 
         <div style={filterGridStyle}>
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search language, code, reviewer or status..."
-            style={inputStyle}
-          />
-
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            style={inputStyle}
-          >
-            <option value="all">All deck statuses</option>
-            <option value="Planning">Planning</option>
-            <option value="Draft">Draft</option>
-            <option value="Review">Review</option>
-            <option value="Published">Published</option>
-          </select>
-
-          <select
-            value={activeFilter}
-            onChange={(event) => setActiveFilter(event.target.value)}
-            style={inputStyle}
-          >
-            <option value="all">All active states</option>
-            <option value="active">Active only</option>
-            <option value="inactive">Inactive only</option>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search name, code, reviewer or status..." />
+          <select style={inputStyle} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="paused">Paused</option>
           </select>
         </div>
-      </div>
 
-      <div style={{ ...styles.smallCard, marginTop: 18 }}>
-        <div style={styles.rowBetween}>
-          <div>
-            <p style={styles.eyebrow}>Firebase languageVersions collection</p>
-            <h3 style={styles.smallCardTitle}>Current language versions</h3>
-          </div>
-          <Pill>{loading ? 'Loading...' : `${filteredLanguages.length} rows`}</Pill>
-        </div>
-
-        {loading ? (
-          <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading language versions from Firebase...
-          </p>
-        ) : filteredLanguages.length === 0 ? (
-          <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            No language versions match your search.
-          </p>
-        ) : (
-          <div style={tableWrapStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>Language</th>
-                  <th style={thStyle}>Code</th>
-                  <th style={thStyle}>Deck Status</th>
-                  <th style={thStyle}>Cards Translated</th>
-                  <th style={thStyle}>Progress</th>
-                  <th style={thStyle}>Reviewer</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={thStyle}>Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredLanguages.map((language) => (
-                  <tr key={language.id}>
-                    <td style={tdStyle}>
-                      <strong>{language.languageName}</strong>
-                    </td>
-                    <td style={tdStyle}>{language.languageCode}</td>
-                    <td style={tdStyle}>{language.deckStatus}</td>
-                    <td style={tdStyle}>
-                      {language.cardsTranslated} / {language.totalCards}
-                    </td>
-                    <td style={tdStyle}>{language.progress}%</td>
-                    <td style={tdStyle}>{language.reviewer}</td>
-                    <td style={tdStyle}>
-                      <Pill tone={language.isActive ? 'success' : 'default'}>
-                        {language.isActive ? 'Active' : 'Inactive'}
-                      </Pill>
-                    </td>
-                    <td style={tdStyle}>
-                      <div style={actionRowStyle}>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleActive(language)}
-                          disabled={updatingId === language.id}
-                          style={secondarySmallButtonStyle}
-                        >
-                          {language.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteLanguage(language)}
-                          disabled={updatingId === language.id}
-                          style={dangerButtonStyle}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <SimpleTable
+          loading={loading}
+          rows={filteredRows}
+          emptyText="No languages found."
+          columns={[
+            { key: 'languageName', label: 'Language' },
+            { key: 'languageCode', label: 'Code' },
+            { key: 'deckStatus', label: 'Deck status' },
+            { key: 'reviewer', label: 'Reviewer' },
+            { key: 'isActive', label: 'Active', render: (row) => <StatusPill value={row.isActive ? 'active' : 'inactive'} /> },
+            {
+              key: 'actions',
+              label: 'Actions',
+              render: (row) => (
+                <div style={actionRowStyle}>
+                  <button type="button" style={secondaryButtonStyle} onClick={() => toggleActive(row)}>{row.isActive ? 'Deactivate' : 'Activate'}</button>
+                  <button type="button" style={dangerButtonStyle} onClick={() => remove(row)}>Delete</button>
+                </div>
+              )
+            }
+          ]}
+        />
       </div>
     </div>
   )
 }
 
-function MessageCard({ message, tone }) {
-  const isError = tone === 'error'
-
-  return (
-    <div
-      style={{
-        ...styles.smallCard,
-        marginTop: 18,
-        borderColor: isError
-          ? 'rgba(153, 27, 27, 0.28)'
-          : 'rgba(22, 101, 52, 0.28)'
-      }}
-    >
-      <p
-        style={{
-          ...styles.smallCardText,
-          color: isError ? '#991b1b' : '#166534'
-        }}
-      >
-        {message}
-      </p>
-    </div>
-  )
-}
-
-const formGridStyle = {
-  marginTop: 18,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: 14
-}
-
-const filterGridStyle = {
-  marginTop: 16,
-  display: 'grid',
-  gridTemplateColumns: 'minmax(260px, 1fr) 220px 220px',
-  gap: 12
-}
-
-const fieldStyle = {
-  display: 'grid',
-  gap: 8,
-  color: '#5c3512',
-  fontWeight: 850
-}
-
-const inputStyle = {
-  width: '100%',
-  padding: '13px 15px',
-  borderRadius: 16,
-  border: '1px solid rgba(139, 92, 40, 0.24)',
-  background: 'rgba(255, 255, 255, 0.76)',
-  color: '#3b2817',
-  outline: 'none'
-}
-
-const primaryButtonStyle = {
-  border: 0,
-  borderRadius: 999,
-  padding: '12px 18px',
-  cursor: 'pointer',
-  background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
-  color: '#fff8eb',
-  fontWeight: 850,
-  boxShadow: '0 14px 30px rgba(92, 53, 18, 0.18)'
-}
-
-const secondaryButtonStyle = {
-  border: '1px solid rgba(139, 92, 40, 0.22)',
-  borderRadius: 999,
-  padding: '11px 16px',
-  cursor: 'pointer',
-  background: 'rgba(255, 255, 255, 0.72)',
-  color: '#5c3512',
-  fontWeight: 850
-}
-
-const secondarySmallButtonStyle = {
-  ...secondaryButtonStyle,
-  padding: '8px 11px',
-  fontSize: '0.82rem'
-}
-
-const dangerButtonStyle = {
-  border: '1px solid rgba(153, 27, 27, 0.28)',
-  borderRadius: 999,
-  padding: '8px 11px',
-  cursor: 'pointer',
-  background: 'rgba(254, 226, 226, 0.86)',
-  color: '#991b1b',
-  fontWeight: 850,
-  fontSize: '0.82rem'
-}
-
-const tableWrapStyle = {
-  marginTop: 16,
-  width: '100%',
-  overflowX: 'auto'
-}
-
-const tableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  minWidth: 980
-}
-
-const thStyle = {
-  padding: '12px 14px',
-  textAlign: 'left',
-  color: '#5c3512',
-  fontSize: '0.78rem',
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  borderBottom: '1px solid rgba(139, 92, 40, 0.2)',
-  background: 'rgba(244, 210, 138, 0.22)'
-}
-
-const tdStyle = {
-  padding: '14px',
-  color: '#3b2817',
-  borderBottom: '1px solid rgba(139, 92, 40, 0.14)',
-  verticalAlign: 'top'
-}
-
-const actionRowStyle = {
-  display: 'flex',
-  gap: 8,
-  flexWrap: 'wrap'
-}
+const formGridStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }
+const filterGridStyle = { marginTop: 16, display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 220px', gap: 12 }
+const buttonRowStyle = { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', gridColumn: '1 / -1' }
+const actionRowStyle = { display: 'flex', gap: 8, flexWrap: 'wrap' }
+const compactPrimaryButtonStyle = { ...primaryButtonStyle, width: 'auto', minWidth: 145, justifySelf: 'start' }
+const checkLabelStyle = { display: 'flex', gap: 8, alignItems: 'center', color: '#5c3512', fontWeight: 850, minHeight: 44 }
 
 export default AdminLanguageManagementScreen

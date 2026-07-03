@@ -1,18 +1,22 @@
-import { useState } from 'react'
+import { useLanguage } from '../../context/LanguageContext'
 import { styles } from './gameStyles'
-import { languageCards } from '../../data/mockUiData'
-import { ActionButton, SectionHeader } from './ui'
+import { Pill, SectionHeader } from './ui'
 
 function MultilingualScreen() {
-  const languages = Object.keys(languageCards)
-  const [language, setLanguage] = useState(languages[0])
-  return (
-    <div style={styles.panel}>
-      <SectionHeader eyebrow="Multilingual expansion" title="Translated card deck screen." />
-      <div style={styles.centerButtonRow}>{languages.map((item) => <ActionButton key={item} variant={item === language ? 'primary' : 'secondary'} onClick={() => setLanguage(item)}>{item}</ActionButton>)}</div>
-      <div style={styles.cardGrid}>{languageCards[language].map((text, index) => <div key={text} style={styles.smallCard}><p style={styles.eyebrow}>{language} card version {index + 1}</p><h3 style={styles.smallCardTitle}>{text}</h3><p style={styles.smallCardText}>This is a UI placeholder for the translated card deck. Admin can manage these language versions later.</p></div>)}</div>
+  const { languageCode, languageOptions, setLanguage, t } = useLanguage()
+  return <div style={styles.panel}>
+    <SectionHeader eyebrow={t('language','Language')} title="Multilingual experience">
+      Choose a language from Firebase languageVersions. The app uses uiTranslations to translate the player interface.
+    </SectionHeader>
+    <div style={styles.metricGrid}>
+      {languageOptions.map((language) => <button key={language.languageCode} type="button" onClick={() => setLanguage(language.languageCode)} style={{...languageCard, borderColor: languageCode === language.languageCode ? 'rgba(22,101,52,.42)' : 'rgba(139,92,40,.16)'}}>
+        <span style={{fontSize:'2rem'}}>🌐</span>
+        <strong>{language.languageName}</strong>
+        <small>{language.languageCode}</small>
+        {languageCode === language.languageCode && <Pill tone="success">Selected</Pill>}
+      </button>)}
     </div>
-  )
+  </div>
 }
-
+const languageCard={padding:20,borderRadius:24,background:'rgba(255,255,255,.66)',border:'1px solid rgba(139,92,40,.16)',display:'grid',gap:8,textAlign:'left',cursor:'pointer',color:'#3b2817'}
 export default MultilingualScreen

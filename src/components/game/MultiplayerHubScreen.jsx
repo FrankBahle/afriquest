@@ -1,30 +1,241 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { ActionButton, DataTable, MetricCard, Pill, SectionHeader } from './ui'
+import { Pill, SectionHeader } from './ui'
+import {
+  createMultiplayerRoom,
+  getMultiplayerRooms,
+  joinMultiplayerRoom,
+  seedMultiplayerTableSamples
+} from '../../services/player/playerMultiplayerService'
+import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
 
-function MultiplayerHubScreen() {
-  const [tab, setTab] = useState('lobby')
-  const tabs = ['lobby', 'create room', 'join room', 'challenge', 'results', 'team mode', 'debate', 'tournament']
+function MultiplayerHubScreen({ fullName = 'Player' }) {
+  const { currentUser } = useAuth()
+  const { t } = usePlayerLanguage()
+  const [rooms, setRooms] = useState([])
+  const [roomName, setRoomName] = useState('')
+  const [mode, setMode] = useState('challenge')
+  const [maxPlayers, setMaxPlayers] = useState('4')
+  const [joinCode, setJoinCode] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [modeFilter, setModeFilter] = useState('all')
+  const [statusMessage, setStatusMessage] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  async function loadRooms() {
+    setLoading(true)
+    setError('')
+    try {
+      const rows = await getMultiplayerRooms()
+      setRooms(rows)
+    } catch (err) {
+      setError(err.message || 'Could not load multiplayer rooms from Firebase.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadRooms()
+  }, [])
+
+  async function handleCreateRoom(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await createMultiplayerRoom({
+        userId: currentUser?.uid,
+        displayName: fullName,
+        roomName,
+        mode,
+        maxPlayers
+      })
+      setRoomName('')
+      setStatusMessage('Room created successfully.')
+      await loadRooms()
+    } catch (err) {
+      setError(err.message || 'Could not create multiplayer room.')
+    }
+  }
+
+  async function handleJoinRoom(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await joinMultiplayerRoom({
+        userId: currentUser?.uid,
+        displayName: fullName,
+        roomCode: joinCode
+      })
+      setJoinCode('')
+      setStatusMessage('Room joined successfully.')
+      await loadRooms()
+    } catch (err) {
+      setError(err.message || 'Could not join multiplayer room.')
+    }
+  }
+
+  async function handleCreateSamples() {
+    setError('')
+    setStatusMessage('')
+    try {
+      const count = await seedMultiplayerTableSamples(currentUser?.uid || 'sample_user')
+      setStatusMessage(`${count} multiplayer table examples created.`)
+      await loadRooms()
+    } catch (err) {
+      setError(err.message || 'Could not create multiplayer table examples.')
+    }
+  }
+
+  const filteredRooms = useMemo(() => {
+    const cleanSearch = searchTerm.trim().toLowerCase()
+    return rooms.filter((room) => {
+      const text = [room.roomName, room.roomCode, room.mode, room.status, room.createdByName].join(' ').toLowerCase()
+      const matchesSearch = !cleanSearch || text.includes(cleanSearch)
+      const matchesMode = modeFilter === 'all' || room.mode === modeFilter
+      return matchesSearch && matchesMode
+    })
+  }, [rooms, searchTerm, modeFilter])
+
   return (
     <div style={styles.panel}>
-      <SectionHeader eyebrow="Version 2 multiplayer" title="Rooms, teams, debates and tournaments." />
-      <div style={styles.centerButtonRow}>{tabs.map((item) => <ActionButton key={item} variant={tab === item ? 'primary' : 'secondary'} onClick={() => setTab(item)}>{item}</ActionButton>)}</div>
-      {tab === 'lobby' && <Lobby />}
-      {tab === 'create room' && <Room title="Create Multiplayer Room Screen" />}
-      {tab === 'join room' && <Room title="Join Multiplayer Room Screen" />}
-      {tab === 'challenge' && <Challenge />}
-      {tab === 'results' && <Results />}
-      {tab === 'team mode' && <TeamMode />}
-      {tab === 'debate' && <Debate />}
-      {tab === 'tournament' && <Tournament />}
+      <SectionHeader eyebrow={t('multiplayer')} title={t('multiplayerTitle')}>
+        {t('multiplayerHelp')}
+      </SectionHeader>
+
+      {error && <MessageCard message={error} tone="error" />}
+      {statusMessage && <MessageCard message={statusMessage} tone="success" />}
+
+      <div style={styles.metricGrid}>
+        <div style={styles.smallCard}>
+          <p style={styles.eyebrow}>Rooms</p>
+          <h3 style={styles.smallCardTitle}>{rooms.length}</h3>
+          <p style={styles.smallCardText}>multiplayerRooms</p>
+        </div>
+        <div style={styles.smallCard}>
+          <p style={styles.eyebrow}>Open Rooms</p>
+          <h3 style={styles.smallCardTitle}>{rooms.filter((room) => room.status === 'waiting').length}</h3>
+          <p style={styles.smallCardText}>Ready for players.</p>
+        </div>
+        <div style={styles.smallCard}>
+          <p style={styles.eyebrow}>Modes</p>
+          <h3 style={styles.smallCardTitle}>4</h3>
+          <p style={styles.smallCardText}>Challenge, Team, Debate, Tournament.</p>
+        </div>
+      </div>
+
+      <div style={styles.twoColumnGrid}>
+        <div style={{ ...styles.smallCard, marginTop: 18 }}>
+          <p style={styles.eyebrow}>{t('createRoom')}</p>
+          <form onSubmit={handleCreateRoom} style={formGridStyle}>
+            <label style={fieldStyle}>{t('roomName')}
+              <input value={roomName} onChange={(event) => setRoomName(event.target.value)} placeholder="Example: Workshop Room 1" style={inputStyle} />
+            </label>
+            <label style={fieldStyle}>{t('mode')}
+              <select value={mode} onChange={(event) => setMode(event.target.value)} style={inputStyle}>
+                <option value="challenge">Challenge Mode</option>
+                <option value="team">Team Mode</option>
+                <option value="debate">Debate Mode</option>
+                <option value="tournament">Tournament Mode</option>
+              </select>
+            </label>
+            <label style={fieldStyle}>Max players
+              <select value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} style={inputStyle}>
+                <option value="2">2</option>
+                <option value="4">4</option>
+                <option value="8">8</option>
+                <option value="12">12</option>
+              </select>
+            </label>
+            <button type="submit" style={primaryButtonStyle}>{t('createRoom')}</button>
+          </form>
+        </div>
+
+        <div style={{ ...styles.smallCard, marginTop: 18 }}>
+          <p style={styles.eyebrow}>{t('joinRoom')}</p>
+          <form onSubmit={handleJoinRoom} style={formGridStyle}>
+            <label style={fieldStyle}>{t('roomCode')}
+              <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="Example: ABC123" style={inputStyle} />
+            </label>
+            <button type="submit" style={primaryButtonStyle}>{t('joinRoom')}</button>
+            <button type="button" onClick={handleCreateSamples} style={secondaryButtonStyle}>Create table examples</button>
+          </form>
+        </div>
+      </div>
+
+      <div style={{ ...styles.smallCard, marginTop: 18 }}>
+        <div style={styles.rowBetween}>
+          <div>
+            <p style={styles.eyebrow}>Search and filter</p>
+            <h3 style={styles.smallCardTitle}>Find multiplayer rooms</h3>
+          </div>
+          <Pill>{filteredRooms.length} rooms</Pill>
+        </div>
+        <div style={filterGridStyle}>
+          <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search room name, code or host..." style={inputStyle} />
+          <select value={modeFilter} onChange={(event) => setModeFilter(event.target.value)} style={inputStyle}>
+            <option value="all">All modes</option>
+            <option value="challenge">Challenge</option>
+            <option value="team">Team</option>
+            <option value="debate">Debate</option>
+            <option value="tournament">Tournament</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ ...styles.smallCard, marginTop: 18 }}>
+        <div style={styles.rowBetween}>
+          <div>
+            <p style={styles.eyebrow}>Firebase multiplayerRooms collection</p>
+            <h3 style={styles.smallCardTitle}>Available rooms</h3>
+          </div>
+          <Pill>{loading ? 'Loading' : `${filteredRooms.length} rows`}</Pill>
+        </div>
+
+        {loading ? (
+          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading multiplayer rooms from Firebase...</p>
+        ) : filteredRooms.length === 0 ? (
+          <p style={{ ...styles.smallCardText, marginTop: 14 }}>No multiplayer rooms match your search.</p>
+        ) : (
+          <div style={roomGridStyle}>
+            {filteredRooms.map((room) => (
+              <article key={room.roomId} style={roomCardStyle}>
+                <div style={styles.rowBetween}>
+                  <div>
+                    <p style={styles.eyebrow}>{room.roomCode}</p>
+                    <h3 style={styles.smallCardTitle}>{room.roomName}</h3>
+                  </div>
+                  <Pill tone={room.status === 'waiting' ? 'success' : 'default'}>{room.status}</Pill>
+                </div>
+                <p style={{ ...styles.smallCardText, marginTop: 10 }}>{room.mode} mode • hosted by {room.createdByName}</p>
+                <p style={styles.smallCardText}>{room.playerCount} / {room.maxPlayers} players</p>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
-function Lobby() { return <div style={styles.metricGrid}><MetricCard title="Multiplayer Lobby Screen" value="4 rooms" /><MetricCard title="Players Online" value="23" /><MetricCard title="Team Mode Lobby" value="Open" /></div> }
-function Room({ title }) { return <div style={{ ...styles.smallCard, marginTop: 18 }}><p style={styles.eyebrow}>{title}</p><h3 style={styles.smallCardTitle}>Room code: GLA-204</h3><p style={styles.smallCardText}>UI-only room creation/join form. Backend sockets are not included.</p><div style={{ marginTop: 12 }}><Pill>Waiting for players</Pill></div></div> }
-function Challenge() { return <div style={styles.cardGrid}>{['Multiplayer Challenge Screen', 'Each player selects up to 3 AI cards', 'Same problem card for everyone'].map((text) => <div key={text} style={styles.smallCard}><h3 style={styles.smallCardTitle}>{text}</h3><p style={styles.smallCardText}>UI placeholder for online challenge mode.</p></div>)}</div> }
-function Results() { return <div style={{ ...styles.smallCard, marginTop: 18 }}><p style={styles.eyebrow}>Multiplayer Results Comparison Screen</p><DataTable columns={[{ key: 'player', label: 'Player' }, { key: 'score', label: 'Score' }, { key: 'creativity', label: 'Creativity' }, { key: 'feasibility', label: 'Feasibility' }]} rows={[{ id: 1, player: 'Player A', score: 84, creativity: 8, feasibility: 13 }, { id: 2, player: 'Player B', score: 79, creativity: 9, feasibility: 11 }]} /></div> }
-function TeamMode() { return <div style={styles.cardGrid}>{['Team Creation Screen', 'Team Shared Solution Screen', 'Team Results Screen'].map((text) => <div key={text} style={styles.smallCard}><h3 style={styles.smallCardTitle}>{text}</h3><p style={styles.smallCardText}>Teams collaborate and submit one shared explanation.</p></div>)}</div> }
-function Debate() { return <div style={styles.cardGrid}>{['Debate Mode Screen', 'Peer Voting Screen', 'Most Realistic Solution Vote', 'Most Innovative Solution Vote', 'Most Ethical Solution Vote', 'Most Scalable African Solution Vote'].map((text) => <div key={text} style={styles.smallCard}><h3 style={styles.smallCardTitle}>{text}</h3><p style={styles.smallCardText}>Peer learning and voting UI placeholder.</p></div>)}</div> }
-function Tournament() { return <div style={styles.cardGrid}>{['Tournament Mode Screen', 'Tournament Leaderboard Screen', 'Advanced Leaderboards'].map((text) => <div key={text} style={styles.smallCard}><h3 style={styles.smallCardTitle}>{text}</h3><p style={styles.smallCardText}>Multi-round competition and ranking view.</p></div>)}</div> }
+
+function MessageCard({ message, tone }) {
+  const isError = tone === 'error'
+  return <div style={{ ...styles.smallCard, marginTop: 18, borderColor: isError ? 'rgba(153, 27, 27, 0.28)' : 'rgba(22, 101, 52, 0.28)' }}><p style={{ ...styles.smallCardText, color: isError ? '#991b1b' : '#166534' }}>{message}</p></div>
+}
+
+const formGridStyle = { display: 'grid', gap: 12, marginTop: 12 }
+const fieldStyle = { display: 'grid', gap: 8, color: '#5c3512', fontWeight: 850 }
+const inputStyle = { width: '100%', padding: '13px 15px', borderRadius: 16, border: '1px solid rgba(139, 92, 40, 0.24)', background: 'rgba(255, 255, 255, 0.76)', color: '#3b2817', outline: 'none' }
+const primaryButtonStyle = { border: 0, borderRadius: 999, padding: '13px 18px', cursor: 'pointer', background: 'linear-gradient(135deg, #9a6a22, #5c3512)', color: '#fff8eb', fontWeight: 850 }
+const secondaryButtonStyle = { border: '1px solid rgba(139, 92, 40, 0.22)', borderRadius: 999, padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.72)', color: '#5c3512', fontWeight: 850 }
+const filterGridStyle = { marginTop: 16, display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 220px', gap: 12 }
+const roomGridStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }
+const roomCardStyle = { padding: 18, borderRadius: 24, background: 'rgba(255,255,255,0.66)', border: '1px solid rgba(139, 92, 40, 0.16)', boxShadow: '0 16px 36px rgba(80, 52, 20, 0.08)' }
+
 export default MultiplayerHubScreen
