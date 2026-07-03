@@ -36,10 +36,21 @@ import {
 import { getPlayerDashboardData } from '../services/player/playerDashboardService'
 import { updatePlayerProfile } from '../services/player/playerProfileService'
 import { getPlayerAnalyticsData } from '../services/player/playerAnalyticsService'
+import { seedRemainingCollections } from '../utils/seedRemainingCollections'
 
 function createRound(cards) {
   if (!cards.length) return { card: null }
   return { card: cards[Math.floor(Math.random() * cards.length)] }
+}
+
+async function handleSeedRemainingCollections() {
+  try {
+    const count = await seedRemainingCollections()
+    alert(`${count} remaining Firestore collections created successfully.`)
+  } catch (error) {
+    console.error(error)
+    alert(error.message || 'Could not create remaining Firestore collections.')
+  }
 }
 
 function countWords(text) {
@@ -593,6 +604,9 @@ async function loadPlayerAnalytics() {
             {cardError}
           </p>
         )}
+
+
+
 
         {journeyActive && (
           <JourneyTabs

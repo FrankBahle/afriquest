@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
 import AuthModal from './components/AuthModal'
 import { useAuth } from './context/AuthContext'
-import GameHome from './components/GameHome'
-import AdminApp from './components/admin/AdminApp'
+
 
 import logo from './assets/images/logo.png'
 import city1 from './assets/images/city1.png'
@@ -36,7 +35,8 @@ const backgroundMedia = [
     src: farm2
   }
 ]
-
+const GameHome = lazy(() => import('./components/GameHome'))
+const AdminApp = lazy(() => import('./components/admin/AdminApp'))
 
 
 function App() {
@@ -56,7 +56,11 @@ function App() {
   }
 
   if (isAdminRoute) {
-    return <AdminApp />
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <AdminApp />
+      </Suspense>
+    )
   }
 
   return <PlayerApp />
@@ -143,9 +147,11 @@ function PlayerApp() {
         </div>
       </nav>
 
-      {currentUser ? (
-        <GameHome currentUser={currentUser} />
-      ) : (
+     {currentUser ? (
+  <Suspense fallback={<LoadingScreen />}>
+    <GameHome currentUser={currentUser} />
+  </Suspense>
+) : (
         <>
           <section className="heroArea" id="about">
             <div className="heroMediaCard">
