@@ -3,7 +3,7 @@ import { db } from '../firebase'
 import problemCardsData from '../assets/json/grit_lab_africa_problem_cards.json'
 
 export async function seedProblemCards() {
-  const cards = problemCardsData.cards || []
+  const cards = problemCardsData.cards || problemCardsData || []
 
   const uploadTasks = cards.map((card) =>
     setDoc(
@@ -13,9 +13,9 @@ export async function seedProblemCards() {
         title: card.title,
         problem_type: card.problem_type,
         problem: card.problem,
-        examples: card.examples,
+        examples: card.examples || [],
         think_about_it: card.think_about_it,
-        sdg_goals: card.sdg_goals,
+        sdg_goals: card.sdg_goals || [],
         cardType: 'problem',
         cardTheme: 'dark-blue',
         backImageName: 'card2.jpeg',

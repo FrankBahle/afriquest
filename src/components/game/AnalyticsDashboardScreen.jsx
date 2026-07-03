@@ -1,29 +1,111 @@
 import { styles } from './gameStyles'
 import { DataTable, MetricCard, SectionHeader } from './ui'
 
-function AnalyticsDashboardScreen({ cards, attempts, selectedProblemStack, coinTransactions, completedProblems, certificateUnlocked }) {
-  const hints = coinTransactions.filter((item) => item.type === 'spent')
-  const usedAiCards = attempts.flatMap((attempt) => attempt.selectedAiCards || [])
-  const avgScore = attempts.length ? Math.round(attempts.reduce((sum, a) => sum + a.totalScore, 0) / attempts.length) : 0
-  const categoryAverages = ['AI relevance', 'Feasibility', 'African context', 'SDG alignment', 'Creativity', 'Ethics'].map((name, index) => ({ id: index, name, average: Math.max(0, avgScore - index * 3) }))
+function AnalyticsDashboardScreen({ analyticsData }) {
+  const data = analyticsData || {}
+
+  const categoryAverageRows = data.categoryAverageRows || []
+  const mostSelectedProblemRows = data.mostSelectedProblemRows || []
+  const aiCardUsageRows = data.aiCardUsageRows || []
+  const commonAiCombinationRows = data.commonAiCombinationRows || []
+  const averageScorePerProblemRows = data.averageScorePerProblemRows || []
+
   return (
     <div style={styles.panel}>
-      <SectionHeader eyebrow="Analytics dashboard" title="Learning analytics and reporting view." />
+      <SectionHeader
+        eyebrow="Player analytics"
+        title="Your learning analytics and reporting view."
+      >
+        This screen shows analytics from your own gameplay data, including selected
+        problems, AI card usage, scores, hints, certificates and replay activity.
+      </SectionHeader>
+
       <div style={styles.metricGrid}>
-        <MetricCard title="Registered Players" value="124" helper="UI demo metric" />
-        <MetricCard title="Active Players" value="38" helper="UI demo metric" />
-        <MetricCard title="Most Selected Problems" value={selectedProblemStack.length || 0} />
-        <MetricCard title="Most Used AI Cards" value={usedAiCards.length || 0} />
-        <MetricCard title="Common AI Combos" value={Math.max(0, attempts.length)} />
-        <MetricCard title="Avg Score / Problem" value={`${avgScore}%`} />
-        <MetricCard title="Hints Requested" value={hints.length} />
-        <MetricCard title="Certificates Issued" value={certificateUnlocked ? 1 : 0} />
-        <MetricCard title="Completion Rate" value={`${Math.round((completedProblems / 10) * 100)}%`} />
-        <MetricCard title="Replay Rate" value={`${attempts.filter((a) => a.attemptNumber > 1).length}`} />
+        <MetricCard title="Game Sessions" value={data.sessionsStarted || 0} />
+        <MetricCard title="Attempts Submitted" value={data.totalAttempts || 0} />
+        <MetricCard title="Scores Received" value={data.totalScores || 0} />
+        <MetricCard title="Average Score" value={`${data.averageScore || 0}%`} />
+        <MetricCard title="Hints Requested" value={data.hintsRequested || 0} />
+        <MetricCard title="Certificates Issued" value={data.certificateCount || 0} />
+        <MetricCard title="Completion Rate" value={`${data.completionRate || 0}%`} />
+        <MetricCard title="Replay Count" value={data.replayRate || 0} />
+        <MetricCard title="GLA Coin Earned" value={data.totalGlaCoinEarned || 0} />
+        <MetricCard title="GLA Coin Spent" value={data.totalGlaCoinSpent || 0} />
       </div>
+            <div style={styles.twoColumnGrid}>
+        <div style={{ ...styles.smallCard, marginTop: 18 }}>
+          <p style={styles.eyebrow}>Average score per scoring category</p>
+          <DataTable
+            columns={[
+              { key: 'name', label: 'Category' },
+              {
+                key: 'average',
+                label: 'Average',
+                render: (row) => `${row.average}%`
+              },
+              { key: 'count', label: 'Count' }
+            ]}
+            rows={categoryAverageRows}
+            emptyText="Scoring category analytics will appear after scored submissions."
+          />
+        </div>
+
+        <div style={{ ...styles.smallCard, marginTop: 18 }}>
+          <p style={styles.eyebrow}>Average score per problem card</p>
+          <DataTable
+            columns={[
+              { key: 'title', label: 'Problem' },
+              { key: 'problem_type', label: 'Type' },
+              {
+                key: 'averageScore',
+                label: 'Average',
+                render: (row) => `${row.averageScore}%`
+              },
+              { key: 'count', label: 'Attempts' }
+            ]}
+            rows={averageScorePerProblemRows}
+            emptyText="Problem score analytics will appear after submissions."
+          />
+        </div>
+      </div>
+
       <div style={styles.twoColumnGrid}>
-        <div style={{ ...styles.smallCard, marginTop: 18 }}><p style={styles.eyebrow}>Average score per scoring category</p><DataTable columns={[{ key: 'name', label: 'Category' }, { key: 'average', label: 'Average', render: (r) => `${r.average}%` }]} rows={categoryAverages} /></div>
-        <div style={{ ...styles.smallCard, marginTop: 18 }}><p style={styles.eyebrow}>Problem card analytics</p><DataTable columns={[{ key: 'title', label: 'Problem' }, { key: 'problem_type', label: 'Type' }]} rows={cards.slice(0, 8)} /></div>
+        <div style={{ ...styles.smallCard, marginTop: 18 }}>
+          <p style={styles.eyebrow}>Problem cards selected most often</p>
+          <DataTable
+            columns={[
+              { key: 'title', label: 'Problem' },
+              { key: 'problem_type', label: 'Type' },
+              { key: 'count', label: 'Selected' }
+            ]}
+            rows={mostSelectedProblemRows}
+            emptyText="Selected problem analytics will appear after creating a problem stack."
+          />
+        </div>
+
+        <div style={{ ...styles.smallCard, marginTop: 18 }}>
+          <p style={styles.eyebrow}>AI cards used most often</p>
+          <DataTable
+            columns={[
+              { key: 'aiCard', label: 'AI Card' },
+              { key: 'count', label: 'Used' }
+            ]}
+            rows={aiCardUsageRows}
+            emptyText="AI card usage analytics will appear after submitting attempts."
+          />
+        </div>
+      </div>
+
+      <div style={{ ...styles.smallCard, marginTop: 18 }}>
+        <p style={styles.eyebrow}>Common AI card combinations</p>
+        <DataTable
+          columns={[
+            { key: 'combination', label: 'Combination' },
+            { key: 'count', label: 'Used' }
+          ]}
+          rows={commonAiCombinationRows}
+          emptyText="AI card combinations will appear after submissions."
+        />
       </div>
     </div>
   )

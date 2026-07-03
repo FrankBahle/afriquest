@@ -1,0 +1,657 @@
+import {
+  addDoc,
+  getDoc,
+  getDocs,
+  increment,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where
+} from 'firebase/firestore'
+import {
+  PLAYER_COLLECTIONS,
+  getUserRef,
+  now,
+  playerCollection,
+  playerDoc
+} from './playerFirebaseService'
+import {
+  logAiCardsSelected,
+  logGameSessionStarted,
+  logHintRequested,
+  logProblemCardsSelected,
+  logScoreReceived,
+  logSolutionSubmitted
+} from './playerAnalyticsService'
+import {
+  updatePlayerActiveSession,
+  updatePlayerCurrentProblemStack,
+  updatePlayerProgressSummary
+} from './playerProfileService'
+
+function cleanData(value) {
+  if (Array.isArray(value)) {
+    return value.map(cleanData)
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, itemValue]) => itemValue !== undefined)
+        .map(([key, itemValue]) => [key, cleanData(itemValue)])
+    )
+  }
+
+  return value
+}
+
+function toSafeNumber(value, fallback = 0) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
+}
+
+function getSelectedAiCardIds(selectedAiCards = []) {
+  return selectedAiCards.map((card) => card.id || card.aiCardId || card)
+}
+
+function getSelectedAiCardTitles(selectedAiCards = []) {
+  return selectedAiCards.map((card) => card.title || '').filter(Boolean)
+}
+
+function normaliseScoreResult(scoreResult = {}) {
+  const totalScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        toSafeNumber(
+          scoreResult.totalScore ||
+            scoreResult.total_score ||
+            scoreResult.score ||
+            scoreResult.GLA_coin_earned ||
+            0
+        )
+      )
+    )
+  )
+
+  return {
+    totalScore,
+    glaCoinEarned: toSafeNumber(
+      scoreResult.glaCoinEarned ||
+        scoreResult.GLA_coin_earned ||
+        scoreResult.gla_coin_earned ||
+        totalScore
+    ),
+    overallFeedback:
+      scoreResult.overallFeedback ||
+      scoreResult.feedback?.overall ||
+      (typeof scoreResult.feedback === 'string' ? scoreResult.feedback : '') ||
+      'Your solution has been scored.',
+    improvementSuggestion:
+      scoreResult.improvementSuggestion ||
+      scoreResult.improvement ||
+      scoreResult.feedback?.improvement ||
+      'Add more practical detail to strengthen your solution.',
+    subScores: scoreResult.subScores || scoreResult.sub_scores || {}
+  }
+}
+
+export async function getActiveProblemCards() {
+  const cardsQuery = query(
+    playerCollection(PLAYER_COLLECTIONS.problemCards),
+    where('isActive', '==', true)
+  )
+
+  const cardsSnap = await getDocs(cardsQuery)
+
+  return cardsSnap.docs
+    .map((cardDoc) => ({
+      id: cardDoc.id,
+      ...cardDoc.data()
+    }))
+    .sort((a, b) => Number(a.id) - Number(b.id))
+}
+
+export async function getActiveAiCards() {
+  const cardsQuery = query(
+    playerCollection(PLAYER_COLLECTIONS.aiCards),
+    where('isActive', '==', true)
+  )
+
+  const cardsSnap = await getDocs(cardsQuery)
+
+  return cardsSnap.docs
+    .map((cardDoc) => ({
+      id: cardDoc.id,
+      ...cardDoc.data()
+    }))
+    .sort((a, b) => Number(a.id) - Number(b.id))
+}
+
+export async function createSelectedProblemStack({
+  userId,
+  selectedProblemIds,
+  stackName = 'Active Problem Stack'
+}) {
+  if (!userId) {
+    throw new Error('User ID is required to create a problem stack.')
+  }
+
+  if (!selectedProblemIds || selectedProblemIds.length < 10) {
+    throw new Error('At least 10 problem cards must be selected.')
+  }
+
+  const stackRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.selectedProblemStacks),
+    cleanData({
+      userId,
+      stackName,
+      selectedProblemIds,
+      selectedCount: selectedProblemIds.length,
+      status: 'active',
+      isActive: true,
+      isSchema: false,
+      createdAt: now(),
+      updatedAt: now()
+    })
+  )
+
+  await updateDoc(stackRef, {
+    selectedProblemStackId: stackRef.id
+  })
+
+  await updatePlayerCurrentProblemStack(userId, stackRef.id)
+  await logProblemCardsSelected(userId, selectedProblemIds)
+
+  return stackRef.id
+}
+
+export async function getCurrentProblemStack(userId) {
+  if (!userId) {
+    return null
+  }
+
+  const userSnap = await getDoc(getUserRef(userId))
+
+  if (!userSnap.exists()) {
+    return null
+  }
+
+  const currentProblemStackId = userSnap.data().currentProblemStackId
+
+  if (!currentProblemStackId) {
+    return null
+  }
+
+  const stackSnap = await getDoc(
+    playerDoc(PLAYER_COLLECTIONS.selectedProblemStacks, currentProblemStackId)
+  )
+
+  if (!stackSnap.exists()) {
+    return null
+  }
+
+  return {
+    id: stackSnap.id,
+    ...stackSnap.data()
+  }
+}
+
+export async function startGameSession({
+  userId,
+  selectedProblemStackId,
+  selectedProblemIds = []
+}) {
+  if (!userId) {
+    throw new Error('User ID is required to start a game session.')
+  }
+
+  if (!selectedProblemStackId) {
+    throw new Error('Selected problem stack ID is required.')
+  }
+
+  const sessionRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.gameSessions),
+    cleanData({
+      userId,
+      selectedProblemStackId,
+      selectedProblemIds,
+      status: 'active',
+      completedProblemCount: 0,
+      currentProblemCardId: '',
+      isSchema: false,
+      startedAt: now(),
+      updatedAt: now()
+    })
+  )
+
+  await updateDoc(sessionRef, {
+    sessionId: sessionRef.id
+  })
+
+  await updatePlayerActiveSession(userId, sessionRef.id)
+
+  await logGameSessionStarted({
+    userId,
+    sessionId: sessionRef.id,
+    selectedProblemStackId
+  })
+
+  return sessionRef.id
+}
+
+export async function getActiveGameSession(userId) {
+  if (!userId) {
+    return null
+  }
+
+  const userSnap = await getDoc(getUserRef(userId))
+
+  if (!userSnap.exists()) {
+    return null
+  }
+
+  const activeSessionId = userSnap.data().activeSessionId
+
+  if (!activeSessionId) {
+    return null
+  }
+
+  const sessionSnap = await getDoc(
+    playerDoc(PLAYER_COLLECTIONS.gameSessions, activeSessionId)
+  )
+
+  if (!sessionSnap.exists()) {
+    return null
+  }
+
+  return {
+    id: sessionSnap.id,
+    ...sessionSnap.data()
+  }
+}
+
+export async function updateCurrentProblemCard(sessionId, problemCardId) {
+  if (!sessionId) {
+    throw new Error('Session ID is required to update current problem card.')
+  }
+
+  await updateDoc(playerDoc(PLAYER_COLLECTIONS.gameSessions, sessionId), {
+    currentProblemCardId: problemCardId,
+    updatedAt: now()
+  })
+
+  return problemCardId
+}
+
+export async function saveAttemptWithScoring({
+  userId,
+  sessionId,
+  problemCard,
+  selectedAiCards,
+  explanation,
+  scoreResult,
+  deepSeekRawResponse = null
+}) {
+  if (!userId) {
+    throw new Error('User ID is required to save attempt.')
+  }
+
+  if (!sessionId) {
+    throw new Error('Session ID is required to save attempt.')
+  }
+
+  if (!problemCard?.id) {
+    throw new Error('Problem card is required to save attempt.')
+  }
+
+  if (!selectedAiCards || selectedAiCards.length === 0) {
+    throw new Error('At least one AI card is required to save attempt.')
+  }
+
+  const selectedAiCardIds = getSelectedAiCardIds(selectedAiCards)
+  const selectedAiCardTitles = getSelectedAiCardTitles(selectedAiCards)
+  const normalisedResult = normaliseScoreResult(scoreResult)
+
+  const previousAttemptsQuery = query(
+    playerCollection(PLAYER_COLLECTIONS.attempts),
+    where('userId', '==', userId),
+    where('problemCardId', '==', String(problemCard.id))
+  )
+
+  const previousAttemptsSnap = await getDocs(previousAttemptsQuery)
+  const attemptNumber = previousAttemptsSnap.size + 1
+
+  const attemptRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.attempts),
+    cleanData({
+      userId,
+      sessionId,
+      problemCardId: String(problemCard.id),
+      problemCardTitle: problemCard.title,
+      selectedAiCardIds,
+      selectedAiCardTitles,
+      explanation,
+      wordCount: explanation.trim().split(/\s+/).filter(Boolean).length,
+      attemptNumber,
+      status: 'scored',
+      isSchema: false,
+      createdAt: now(),
+      updatedAt: now()
+    })
+  )
+
+  await updateDoc(attemptRef, {
+    attemptId: attemptRef.id
+  })
+
+  const evaluationRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.deepSeekEvaluations),
+    cleanData({
+      evaluationId: '',
+      userId,
+      sessionId,
+      attemptId: attemptRef.id,
+      problemCardId: String(problemCard.id),
+      requestPayload: {
+        problemCard,
+        selectedAiCards,
+        explanation
+      },
+      responsePayload: deepSeekRawResponse || scoreResult,
+      status: 'completed',
+      isSchema: false,
+      createdAt: now()
+    })
+  )
+
+  await updateDoc(evaluationRef, {
+    evaluationId: evaluationRef.id
+  })
+
+  const scoreRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.scores),
+    cleanData({
+      scoreId: '',
+      userId,
+      sessionId,
+      attemptId: attemptRef.id,
+      evaluationId: evaluationRef.id,
+      problemCardId: String(problemCard.id),
+      rubricId: 'default',
+      totalScore: normalisedResult.totalScore,
+      glaCoinEarned: normalisedResult.glaCoinEarned,
+      isBestScore: false,
+      isSchema: false,
+      createdAt: now()
+    })
+  )
+
+  await updateDoc(scoreRef, {
+    scoreId: scoreRef.id
+  })
+
+  const subScoreTasks = Object.entries(normalisedResult.subScores).map(
+    ([rubricKey, score]) =>
+      addDoc(
+        playerCollection(PLAYER_COLLECTIONS.subScores),
+        cleanData({
+          userId,
+          sessionId,
+          attemptId: attemptRef.id,
+          scoreId: scoreRef.id,
+          rubricKey,
+          score: toSafeNumber(score),
+          isSchema: false,
+          createdAt: now()
+        })
+      )
+  )
+
+  await Promise.all(subScoreTasks)
+
+  const feedbackRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.feedback),
+    cleanData({
+      feedbackId: '',
+      userId,
+      sessionId,
+      attemptId: attemptRef.id,
+      scoreId: scoreRef.id,
+      problemCardId: String(problemCard.id),
+      overallFeedback: normalisedResult.overallFeedback,
+      improvementSuggestion: normalisedResult.improvementSuggestion,
+      isSchema: false,
+      createdAt: now()
+    })
+  )
+
+  await updateDoc(feedbackRef, {
+    feedbackId: feedbackRef.id
+  })
+
+  const transactionRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.glaCoinTransactions),
+    cleanData({
+      transactionId: '',
+      userId,
+      type: 'earned',
+      amount: normalisedResult.glaCoinEarned,
+      reason: 'problem_score',
+      relatedAttemptId: attemptRef.id,
+      relatedHintRequestId: '',
+      problemCardId: String(problemCard.id),
+      sessionId,
+      isSchema: false,
+      createdAt: now()
+    })
+  )
+
+  await updateDoc(transactionRef, {
+    transactionId: transactionRef.id
+  })
+
+  await updateDoc(getUserRef(userId), {
+    glaCoinBalance: increment(normalisedResult.glaCoinEarned),
+    totalGlaCoinEarned: increment(normalisedResult.glaCoinEarned),
+    updatedAt: now()
+  })
+
+  await updateDoc(playerDoc(PLAYER_COLLECTIONS.gameSessions, sessionId), {
+    completedProblemCount: increment(1),
+    updatedAt: now()
+  })
+
+  await logSolutionSubmitted({
+    userId,
+    sessionId,
+    attemptId: attemptRef.id,
+    problemCardId: String(problemCard.id),
+    selectedAiCardIds,
+    wordCount: explanation.trim().split(/\s+/).filter(Boolean).length
+  })
+
+  await logScoreReceived({
+    userId,
+    sessionId,
+    attemptId: attemptRef.id,
+    scoreId: scoreRef.id,
+    problemCardId: String(problemCard.id),
+    totalScore: normalisedResult.totalScore,
+    glaCoinEarned: normalisedResult.glaCoinEarned
+  })
+
+  return {
+    attemptId: attemptRef.id,
+    evaluationId: evaluationRef.id,
+    scoreId: scoreRef.id,
+    feedbackId: feedbackRef.id,
+    transactionId: transactionRef.id,
+    totalScore: normalisedResult.totalScore,
+    glaCoinEarned: normalisedResult.glaCoinEarned,
+    overallFeedback: normalisedResult.overallFeedback,
+    improvementSuggestion: normalisedResult.improvementSuggestion,
+    subScores: normalisedResult.subScores
+  }
+}
+
+export async function requestPlayerHint({
+  userId,
+  sessionId,
+  problemCardId,
+  attemptId = '',
+  hintText
+}) {
+  if (!userId) {
+    throw new Error('User ID is required to request a hint.')
+  }
+
+  const userRef = getUserRef(userId)
+  const userSnap = await getDoc(userRef)
+
+  if (!userSnap.exists()) {
+    throw new Error('Player profile was not found.')
+  }
+
+  const userData = userSnap.data()
+  const currentBalance = toSafeNumber(userData.glaCoinBalance)
+
+  if (currentBalance < 20) {
+    throw new Error('You need at least 20 GLA coin to request a hint.')
+  }
+
+  const balanceAfter = currentBalance - 20
+
+  const hintRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.hintRequests),
+    cleanData({
+      hintRequestId: '',
+      userId,
+      sessionId,
+      problemCardId,
+      attemptId,
+      hintText,
+      cost: 20,
+      glaCoinBalanceBefore: currentBalance,
+      glaCoinBalanceAfter: balanceAfter,
+      status: 'used',
+      isSchema: false,
+      createdAt: now()
+    })
+  )
+
+  await updateDoc(hintRef, {
+    hintRequestId: hintRef.id
+  })
+
+  const transactionRef = await addDoc(
+    playerCollection(PLAYER_COLLECTIONS.glaCoinTransactions),
+    cleanData({
+      transactionId: '',
+      userId,
+      type: 'spent',
+      amount: 20,
+      reason: 'hint_used',
+      relatedAttemptId: attemptId,
+      relatedHintRequestId: hintRef.id,
+      sessionId,
+      problemCardId,
+      balanceBefore: currentBalance,
+      balanceAfter,
+      isSchema: false,
+      createdAt: now()
+    })
+  )
+
+  await updateDoc(transactionRef, {
+    transactionId: transactionRef.id
+  })
+
+  await updateDoc(userRef, {
+    glaCoinBalance: increment(-20),
+    totalGlaCoinSpent: increment(20),
+    totalHintsUsed: increment(1),
+    updatedAt: now()
+  })
+
+  await logHintRequested({
+    userId,
+    sessionId,
+    hintRequestId: hintRef.id,
+    problemCardId,
+    cost: 20
+  })
+
+  return {
+    hintRequestId: hintRef.id,
+    transactionId: transactionRef.id,
+    hintText,
+    balanceAfter
+  }
+}
+
+export async function completeGameSession(userId, sessionId) {
+  if (!userId || !sessionId) {
+    throw new Error('User ID and session ID are required to complete session.')
+  }
+
+  await updateDoc(playerDoc(PLAYER_COLLECTIONS.gameSessions, sessionId), {
+    status: 'completed',
+    endedAt: now(),
+    updatedAt: now()
+  })
+
+  await updatePlayerActiveSession(userId, '')
+
+  return sessionId
+}
+
+export async function refreshPlayerProgressFromAttempts(userId) {
+  if (!userId) {
+    return null
+  }
+
+  const scoresQuery = query(
+    playerCollection(PLAYER_COLLECTIONS.scores),
+    where('userId', '==', userId)
+  )
+
+  const scoresSnap = await getDocs(scoresQuery)
+
+  const bestScoresByProblem = {}
+
+  scoresSnap.docs.forEach((scoreDoc) => {
+    const scoreData = scoreDoc.data()
+    const problemCardId = scoreData.problemCardId
+    const totalScore = toSafeNumber(scoreData.totalScore)
+
+    if (!bestScoresByProblem[problemCardId]) {
+      bestScoresByProblem[problemCardId] = totalScore
+      return
+    }
+
+    bestScoresByProblem[problemCardId] = Math.max(
+      bestScoresByProblem[problemCardId],
+      totalScore
+    )
+  })
+
+  const scoreValues = Object.values(bestScoresByProblem)
+  const completedProblemCount = scoreValues.length
+  const averageScore =
+    completedProblemCount > 0
+      ? Math.round(
+          scoreValues.reduce((total, score) => total + score, 0) /
+            completedProblemCount
+        )
+      : 0
+  const bestScore = scoreValues.length > 0 ? Math.max(...scoreValues) : 0
+
+  return updatePlayerProgressSummary(userId, {
+    completedProblemCount,
+    averageScore,
+    bestScore
+  })
+}

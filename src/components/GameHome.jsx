@@ -26,6 +26,16 @@ import MultiplayerHubScreen from './game/MultiplayerHubScreen'
 import RewardsLaunchScreen from './game/RewardsLaunchScreen'
 import { usePlayerLanguage } from '../hooks/usePlayerLanguage'
 import { DEFAULT_PLAYER_SETTINGS } from '../services/player/playerSettingsService'
+import {
+  createSelectedProblemStack,
+  getActiveAiCards,
+  getActiveProblemCards,
+  saveAttemptWithScoring,
+  startGameSession
+} from '../services/player/playerJourneyService'
+import { getPlayerDashboardData } from '../services/player/playerDashboardService'
+import { updatePlayerProfile } from '../services/player/playerProfileService'
+import { getPlayerAnalyticsData } from '../services/player/playerAnalyticsService'
 
 function createRound(cards) {
   if (!cards.length) return { card: null }
@@ -67,12 +77,50 @@ function generateBasicHint(problemCard) {
   return `Look at the problem type: "${problemCard.problem_type}". Choose one AI card that understands the problem, one that helps people access support, and one that makes the solution practical in the community.`
 }
 
+
+function normaliseProblemCard(card) {
+  return {
+    ...card,
+    id: Number(card.id),
+    title: card.title || '',
+    problem_type: card.problem_type || card.problemType || '',
+    problem: card.problem || '',
+    examples: card.examples || [],
+    think_about_it: card.think_about_it || card.thinkAboutIt || '',
+    sdg_goals: card.sdg_goals || card.sdgGoals || []
+  }
+}
+
+function normaliseAiCard(card) {
+  return {
+    ...card,
+    id: Number(card.id),
+    title: card.title || '',
+    type: card.type || card.ai_type || '',
+    canDo: card.canDo || card.what_it_can_do || '',
+    examples: card.examples || [],
+    question: card.question || card.think_about_it || ''
+  }
+}
+
 function GameHome({ currentUser }) {
-  const cards = problemCards.cards || []
+ const fallbackProblemCards = problemCards.cards || []
   const { t } = usePlayerLanguage()
 
+ const [analyticsData, setAnalyticsData] = useState(null)
+ const [analyticsLoading, setAnalyticsLoading] = useState(false)
+ const [analyticsError, setAnalyticsError] = useState('')
+ const [dashboardData, setDashboardData] = useState(null)
+ const [dashboardLoading, setDashboardLoading] = useState(false)
+ const [dashboardError, setDashboardError] = useState('')
+ const [cards, setCards] = useState(fallbackProblemCards)
+ const [availableAiCards, setAvailableAiCards] = useState(aiCards)
+ const [cardLoading, setCardLoading] = useState(false)
+  const [cardError, setCardError] = useState('')
   const [screen, setScreen] = useState('intro')
   const [selectedProblemIds, setSelectedProblemIds] = useState([])
+  const [activeSessionId, setActiveSessionId] = useState('')
+ const [activeProblemStackId, setActiveProblemStackId] = useState('')
   const [round, setRound] = useState(() => createRound([]))
   const [selectedAiCards, setSelectedAiCards] = useState([])
   const [flippedProblem, setFlippedProblem] = useState(false)
@@ -89,7 +137,8 @@ function GameHome({ currentUser }) {
   const [isChanging, setIsChanging] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [accessibilitySettings, setAccessibilitySettings] = useState(DEFAULT_PLAYER_SETTINGS)
-
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
   const fullName = useMemo(() => currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Player', [currentUser])
   const firstName = fullName.split(' ')[0]
   const email = currentUser?.email || ''
@@ -150,16 +199,43 @@ function GameHome({ currentUser }) {
     setShowHintConfirm(false)
   }
 
-  function startGame() {
-    const stack = cards.filter((card) => selectedProblemIds.includes(card.id))
-    if (stack.length < 10) {
-      setScreen('select')
-      return
-    }
+ async function startGame() {
+  const userId = currentUser?.uid
+  const stack = cards.filter((card) => selectedProblemIds.includes(card.id))
+
+  if (stack.length < 10) {
+    setScreen('select')
+    return
+  }
+
+  if (!userId) {
+    alert('You must be logged in to start the game.')
+    return
+  }
+
+  try {
+   const selectedProblemStackId = await createSelectedProblemStack({
+  userId,
+  selectedProblemIds
+})
+
+const sessionId = await startGameSession({
+  userId,
+  selectedProblemStackId,
+  selectedProblemIds
+})
+
+setActiveProblemStackId(selectedProblemStackId)
+setActiveSessionId(sessionId)
+
     setRound(createRound(stack))
     resetRound()
     setScreen('play')
+  } catch (error) {
+    console.error(error)
+    alert(error.message || 'Could not start the game session.')
   }
+}
 
   function handleNextRound() {
     if (activeProblemStack.length < 10) {
@@ -219,12 +295,15 @@ function GameHome({ currentUser }) {
     event.dataTransfer.setData('text/plain', String(aiCardId))
   }
 
-  function handleDrop(event) {
-    event.preventDefault()
-    const aiCardId = Number(event.dataTransfer.getData('text/plain'))
-    const aiCard = aiCards.find((card) => card.id === aiCardId)
-    if (aiCard) toggleAiCard(aiCard)
-  }
+function handleDrop(event) {
+  event.preventDefault()
+
+  const aiCardId = Number(event.dataTransfer.getData('text/plain'))
+  const aiCard = availableAiCards.find((card) => card.id === aiCardId)
+
+  if (aiCard) toggleAiCard(aiCard)
+}
+
 
   function toggleAiFlip(cardId) {
     if (!accessibilitySettings.cardFlipEnabled) return
@@ -239,6 +318,7 @@ function GameHome({ currentUser }) {
   async function submitExplanation() {
     const trimmedExplanation = userExplanation.trim()
     if (!round.card) return setAiError('No problem card is active. Please start the game first.')
+      if (!activeSessionId) return setAiError('No active game session found. Please start the game again.')
     if (selectedAiCards.length === 0) return setAiError('Please select at least one AI card before submitting.')
     if (selectedAiCards.length > 3) return setAiError('You can only select up to 3 AI cards.')
     if (!trimmedExplanation) return setAiError('Please write your explanation before submitting.')
@@ -250,11 +330,42 @@ function GameHome({ currentUser }) {
       const selectedSolutionForCurrentBackend = { cardId: selectedAiCards[0].id, title: selectedAiCards.map((card) => card.title).join(' + '), description: selectedAiCards.map((card) => `${card.title}: ${card.canDo || card.what_it_can_do || ''}`).join('\n') }
       const result = await gradeExplanation({ problemCard: round.card, selectedSolution: selectedSolutionForCurrentBackend, selectedAiCards, userExplanation: trimmedExplanation })
       const normalisedResult = normaliseAiResult(result)
+      const savedAttempt = await saveAttemptWithScoring({
+  userId: currentUser.uid,
+  sessionId: activeSessionId,
+  problemCard: round.card,
+  selectedAiCards,
+  explanation: trimmedExplanation,
+  scoreResult: normalisedResult,
+  deepSeekRawResponse: result
+})
       const createdAt = new Date().toLocaleString()
       const attemptNumber = attempts.filter((attempt) => attempt.problemId === round.card.id).length + 1
       const balanceAfter = glaCoinBalance + normalisedResult.glaCoinEarned
-      const attemptRecord = { id: Date.now(), problemId: round.card.id, problemTitle: round.card.title, selectedAiCards, explanation: trimmedExplanation, totalScore: normalisedResult.totalScore, glaCoinEarned: normalisedResult.glaCoinEarned, feedback: normalisedResult.overallFeedback, improvement: normalisedResult.improvement, subScores: normalisedResult.subScores, attemptNumber, createdAt }
-      const coinTransaction = { id: `earned-${Date.now()}`, type: 'earned', amount: normalisedResult.glaCoinEarned, balanceAfter, reason: 'DeepSeek score reward', problemId: round.card.id, problemTitle: round.card.title, createdAt }
+const attemptRecord = {
+  id: savedAttempt.attemptId,
+  problemId: round.card.id,
+  problemTitle: round.card.title,
+  selectedAiCards,
+  explanation: trimmedExplanation,
+  totalScore: savedAttempt.totalScore,
+  glaCoinEarned: savedAttempt.glaCoinEarned,
+  feedback: savedAttempt.overallFeedback,
+  improvement: savedAttempt.improvementSuggestion,
+  subScores: savedAttempt.subScores,
+  attemptNumber,
+  createdAt
+}      
+const coinTransaction = {
+  id: savedAttempt.transactionId,
+  type: 'earned',
+  amount: savedAttempt.glaCoinEarned,
+  balanceAfter,
+  reason: 'DeepSeek score reward',
+  problemId: round.card.id,
+  problemTitle: round.card.title,
+  createdAt
+}
       setHasSubmittedExplanation(true)
       setGlaCoinBalance(balanceAfter)
       setAttempts((previousAttempts) => [...previousAttempts, attemptRecord])
@@ -284,6 +395,17 @@ function GameHome({ currentUser }) {
   function updateAccessibilitySetting(key, value) {
     setAccessibilitySettings((previous) => ({ ...previous, [key]: value }))
   }
+useEffect(() => {
+  if (screen === 'dashboard' || screen === 'profile' || screen === 'certificate') {
+    loadPlayerDashboard()
+  }
+}, [screen, currentUser?.uid])
+
+useEffect(() => {
+  if (screen === 'analytics') {
+    loadPlayerAnalytics()
+  }
+}, [screen, currentUser?.uid, cards.length])
 
   function handleSettingsSaved(nextSettings) {
     setAccessibilitySettings(nextSettings)
@@ -307,44 +429,445 @@ function GameHome({ currentUser }) {
     accessibilitySettings.showCardImages ? '' : 'glaHideCardImages'
   ].filter(Boolean).join(' ')
 
+useEffect(() => {
+  async function loadCardsFromFirestore() {
+    setCardLoading(true)
+    setCardError('')
+
+    try {
+      const [firestoreProblemCards, firestoreAiCards] = await Promise.all([
+        getActiveProblemCards(),
+        getActiveAiCards()
+      ])
+
+      if (firestoreProblemCards.length > 0) {
+        setCards(firestoreProblemCards.map(normaliseProblemCard))
+      }
+
+      if (firestoreAiCards.length > 0) {
+        setAvailableAiCards(firestoreAiCards.map(normaliseAiCard))
+      }
+    } catch (error) {
+      console.error(error)
+      setCardError('Could not load cards from Firestore. Using local cards for now.')
+    } finally {
+      setCardLoading(false)
+    }
+  }
+
+  loadCardsFromFirestore()
+}, [])
+
+async function loadPlayerDashboard() {
+  if (!currentUser?.uid) return
+
+  setDashboardLoading(true)
+  setDashboardError('')
+
+  try {
+    const data = await getPlayerDashboardData(currentUser.uid)
+    setDashboardData(data)
+
+    if (data?.glaCoinBalance !== undefined) {
+      setGlaCoinBalance(data.glaCoinBalance)
+    }
+  } catch (error) {
+    console.error(error)
+    setDashboardError('Could not load dashboard data from Firestore.')
+  } finally {
+    setDashboardLoading(false)
+  }
+}
+
+async function handleSaveProfile(profileData) {
+  if (!currentUser?.uid) {
+    setProfileMessage('You must be logged in to update your profile.')
+    return
+  }
+
+  setProfileSaving(true)
+  setProfileMessage('')
+
+  try {
+    await updatePlayerProfile(currentUser.uid, profileData)
+    setProfileMessage('Profile updated successfully.')
+    await loadPlayerDashboard()
+  } catch (error) {
+    console.error(error)
+    setProfileMessage(error.message || 'Could not update profile.')
+  } finally {
+    setProfileSaving(false)
+  }
+}
+
+const firestoreSelectedProblemStackIds =
+  dashboardData?.selectedProblemStack?.selectedProblemIds || []
+
+const firestoreSelectedProblemStack =
+  firestoreSelectedProblemStackIds.length > 0
+    ? cards.filter(
+        (card) =>
+          firestoreSelectedProblemStackIds.includes(card.id) ||
+          firestoreSelectedProblemStackIds.includes(String(card.id))
+      )
+    : activeProblemStack
+
+const firestoreFullName =
+  dashboardData?.profile
+    ? `${dashboardData.profile.firstName || ''} ${dashboardData.profile.lastName || ''}`.trim()
+    : fullName
+
+const firestoreCertificateUnlocked =
+  dashboardData?.certificateUnlocked ?? certificateUnlocked
+
+
+
+async function loadPlayerAnalytics() {
+  if (!currentUser?.uid) return
+
+  setAnalyticsLoading(true)
+  setAnalyticsError('')
+
+  try {
+    const data = await getPlayerAnalyticsData(currentUser.uid, cards)
+    setAnalyticsData(data)
+  } catch (error) {
+    console.error(error)
+    setAnalyticsError('Could not load analytics data from Firestore.')
+  } finally {
+    setAnalyticsLoading(false)
+  }
+}
+
+
+
   return (
     <section style={gameHomeWrapperStyle} className={gameHomeClassName}>
       <style>{pageCss}</style>
+
       <div className="glaGamePageHeader">
-        <button type="button" onClick={() => setSidebarOpen(true)} className="glaMenuButton"><span className="glaMenuIcon">☰</span> {t('menu')}</button>
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          className="glaMenuButton"
+        >
+          <span className="glaMenuIcon">☰</span> {t('menu')}
+        </button>
+
         <p className="glaPageTitle">{t('gameTitle')}</p>
       </div>
+
       <div className={`glaSidebarOverlay ${sidebarOpen ? 'open' : ''}`}>
-        <button type="button" aria-label="Close menu" className="glaSidebarBackdrop" onClick={() => setSidebarOpen(false)}></button>
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="glaSidebarBackdrop"
+          onClick={() => setSidebarOpen(false)}
+        ></button>
+
         <div className="glaSidebarDrawer">
-          <GameSidebar screen={screen} onNavigate={handleSidebarNavigation} onClose={() => setSidebarOpen(false)} selectedProblemCount={selectedProblemIds.length} completedProblems={completedProblems} certificationProgress={certificationProgress} averageScore={averageScore} glaCoinBalance={glaCoinBalance} certificateUnlocked={certificateUnlocked} latestAttempt={latestAttempt} />
+          <GameSidebar
+            screen={screen}
+            onNavigate={handleSidebarNavigation}
+            onClose={() => setSidebarOpen(false)}
+            selectedProblemCount={selectedProblemIds.length}
+            completedProblems={completedProblems}
+            certificationProgress={certificationProgress}
+            averageScore={averageScore}
+            glaCoinBalance={glaCoinBalance}
+            certificateUnlocked={certificateUnlocked}
+            latestAttempt={latestAttempt}
+          />
         </div>
       </div>
+
       <main className="glaGameContent">
-        {journeyActive && <JourneyTabs screen={screen} selectedProblemCount={selectedProblemIds.length} roundActive={Boolean(round.card)} latestAttempt={latestAttempt} onNavigate={handleJourneyNavigation} />}
-        {screen === 'intro' && <GameGuideScreen firstName={firstName} onChooseProblems={() => setScreen('select')} />}
-        {screen === 'select' && <ProblemSelectionScreen cards={cards} selectedProblemIds={selectedProblemIds} onToggleProblem={toggleProblemCard} onStartGame={startGame} />}
-        {screen === 'play' && <PlayGameScreen round={round} aiCards={aiCards} selectedAiCards={selectedAiCards} flippedProblem={flippedProblem} flippedAiCards={flippedAiCards} userExplanation={userExplanation} wordCount={wordCount} explanationTooLong={explanationTooLong} hasSubmittedExplanation={hasSubmittedExplanation} aiLoading={aiLoading} aiError={aiError} hintMessage={hintMessage} showHintConfirm={showHintConfirm} glaCoinBalance={glaCoinBalance} certificationProgress={certificationProgress} averageScore={averageScore} fullName={fullName} card1={card1} card2={card2} isChanging={isChanging} onToggleProblemFlip={toggleProblemFlip} onToggleAiCard={toggleAiCard} onRemoveSelectedAiCard={removeSelectedAiCard} onToggleAiFlip={toggleAiFlip} onDragStart={handleDragStart} onDrop={handleDrop} onExplanationChange={setUserExplanation} onSubmit={submitExplanation} onShowHintConfirm={() => setShowHintConfirm(true)} onCancelHint={() => setShowHintConfirm(false)} onConfirmHint={confirmHintPurchase} onOpenLatestScore={() => setScreen('score')} onNextRound={handleNextRound} latestAttempt={latestAttempt} onGoToSelection={() => setScreen('select')} appSettings={accessibilitySettings} />}
-        {screen === 'score' && <ScoringFeedbackScreen currentAttempt={latestAttempt} currentProblem={round.card} currentProblemAttemptStats={latestAttemptProblemStats} glaCoinBalance={glaCoinBalance} onOpenRetry={() => setScreen('retry')} onNextProblem={handleNextRound} onOpenDashboard={() => setScreen('dashboard')} onOpenCoinHistory={() => setScreen('coins')} />}
-        {screen === 'retry' && <RetryAttemptScreen currentProblem={round.card} currentProblemAttemptStats={currentProblemAttemptStats} onStartRetry={handleRetryCurrentProblem} onCancel={() => setScreen(latestAttempt ? 'score' : 'play')} onNextProblem={handleNextRound} />}
-        {screen === 'dashboard' && <PlayerDashboardScreen firstName={firstName} selectedProblemStack={activeProblemStack} completedProblemRows={completedProblemRows} completedProblems={completedProblems} averageScore={averageScore} certificateUnlocked={certificateUnlocked} certificationProgress={certificationProgress} glaCoinBalance={glaCoinBalance} totalGlaCoinEarned={totalGlaCoinEarned} glaCoinSpentOnHints={glaCoinSpentOnHints} attempts={attempts} attemptStatsByProblem={attemptStatsByProblem} bestScoringProblems={bestScoringProblems} latestAttempt={latestAttempt} onOpenCoinHistory={() => setScreen('coins')} onOpenLatestScore={() => setScreen(latestAttempt ? 'score' : 'play')} onOpenCertificate={() => setScreen('certificate')} onOpenProfile={() => setScreen('profile')} />}
-        {screen === 'coins' && <CoinHistoryScreen glaCoinBalance={glaCoinBalance} totalGlaCoinEarned={totalGlaCoinEarned} glaCoinSpentOnHints={glaCoinSpentOnHints} coinTransactions={coinTransactions} onBackToDashboard={() => setScreen('dashboard')} />}
-        {screen === 'certificate' && <CertificateScreen fullName={fullName} completedProblems={completedProblems} averageScore={averageScore} certificateUnlocked={certificateUnlocked} certificateId={certificateId} issueDate={issueDate} onBackToDashboard={() => setScreen('dashboard')} />}
-        {screen === 'profile' && <PlayerProfileScreen fullName={fullName} email={email} selectedProblemStack={activeProblemStack} completedProblemRows={completedProblemRows} attempts={attempts} glaCoinBalance={glaCoinBalance} certificateUnlocked={certificateUnlocked} />}
-        {screen === 'achievements' && <AchievementsBadgesScreen attempts={attempts} completedProblems={completedProblems} totalGlaCoinEarned={totalGlaCoinEarned} />}
-        {screen === 'levels' && <LevelsProgressionScreen totalGlaCoinEarned={totalGlaCoinEarned} completedProblems={completedProblems} averageScore={averageScore} />}
-        {screen === 'leaderboard' && <LeaderboardScreen fullName={fullName} averageScore={averageScore} completedProblems={completedProblems} totalGlaCoinEarned={totalGlaCoinEarned} />}
-        {screen === 'analytics' && <AnalyticsDashboardScreen cards={cards} attempts={attempts} selectedProblemStack={activeProblemStack} coinTransactions={coinTransactions} completedProblems={completedProblems} certificateUnlocked={certificateUnlocked} />}
+        {cardLoading && (
+          <p style={{ color: '#5c3512', fontWeight: 800 }}>
+            Loading cards from Firestore...
+          </p>
+        )}
+
+        {cardError && (
+          <p style={{ color: '#9a3412', fontWeight: 800 }}>
+            {cardError}
+          </p>
+        )}
+
+        {journeyActive && (
+          <JourneyTabs
+            screen={screen}
+            selectedProblemCount={selectedProblemIds.length}
+            roundActive={Boolean(round.card)}
+            latestAttempt={latestAttempt}
+            onNavigate={handleJourneyNavigation}
+          />
+        )}
+
+        {screen === 'intro' && (
+          <GameGuideScreen
+            firstName={firstName}
+            onChooseProblems={() => setScreen('select')}
+          />
+        )}
+
+        {screen === 'select' && (
+          <ProblemSelectionScreen
+            cards={cards}
+            selectedProblemIds={selectedProblemIds}
+            onToggleProblem={toggleProblemCard}
+            onStartGame={startGame}
+          />
+        )}
+
+        {screen === 'play' && (
+          <PlayGameScreen
+            round={round}
+            aiCards={availableAiCards}
+            selectedAiCards={selectedAiCards}
+            flippedProblem={flippedProblem}
+            flippedAiCards={flippedAiCards}
+            userExplanation={userExplanation}
+            wordCount={wordCount}
+            explanationTooLong={explanationTooLong}
+            hasSubmittedExplanation={hasSubmittedExplanation}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            hintMessage={hintMessage}
+            showHintConfirm={showHintConfirm}
+            glaCoinBalance={glaCoinBalance}
+            certificationProgress={certificationProgress}
+            averageScore={averageScore}
+            fullName={fullName}
+            card1={card1}
+            card2={card2}
+            isChanging={isChanging}
+            onToggleProblemFlip={toggleProblemFlip}
+            onToggleAiCard={toggleAiCard}
+            onRemoveSelectedAiCard={removeSelectedAiCard}
+            onToggleAiFlip={toggleAiFlip}
+            onDragStart={handleDragStart}
+            onDrop={handleDrop}
+            onExplanationChange={setUserExplanation}
+            onSubmit={submitExplanation}
+            onShowHintConfirm={() => setShowHintConfirm(true)}
+            onCancelHint={() => setShowHintConfirm(false)}
+            onConfirmHint={confirmHintPurchase}
+            onOpenLatestScore={() => setScreen('score')}
+            onNextRound={handleNextRound}
+            latestAttempt={latestAttempt}
+            onGoToSelection={() => setScreen('select')}
+            appSettings={accessibilitySettings}
+          />
+        )}
+
+        {screen === 'score' && (
+          <ScoringFeedbackScreen
+            currentAttempt={latestAttempt}
+            currentProblem={round.card}
+            currentProblemAttemptStats={latestAttemptProblemStats}
+            glaCoinBalance={glaCoinBalance}
+            onOpenRetry={() => setScreen('retry')}
+            onNextProblem={handleNextRound}
+            onOpenDashboard={() => setScreen('dashboard')}
+            onOpenCoinHistory={() => setScreen('coins')}
+          />
+        )}
+
+        {screen === 'retry' && (
+          <RetryAttemptScreen
+            currentProblem={round.card}
+            currentProblemAttemptStats={currentProblemAttemptStats}
+            onStartRetry={handleRetryCurrentProblem}
+            onCancel={() => setScreen(latestAttempt ? 'score' : 'play')}
+            onNextProblem={handleNextRound}
+          />
+        )}
+
+        {screen === 'dashboard' && (
+          <>
+            {dashboardLoading && (
+              <p style={{ color: '#5c3512', fontWeight: 800 }}>
+                Loading dashboard data...
+              </p>
+            )}
+
+            {dashboardError && (
+              <p style={{ color: '#9a3412', fontWeight: 800 }}>
+                {dashboardError}
+              </p>
+            )}
+
+            <PlayerDashboardScreen
+              firstName={firstName}
+              selectedProblemStack={firestoreSelectedProblemStack}
+              completedProblemRows={dashboardData?.completedProblemRows || completedProblemRows}
+              completedProblems={dashboardData?.completedProblems ?? completedProblems}
+              averageScore={dashboardData?.averageScore ?? averageScore}
+              certificateUnlocked={dashboardData?.certificateUnlocked ?? certificateUnlocked}
+              certificationProgress={dashboardData?.certificationProgress ?? certificationProgress}
+              glaCoinBalance={dashboardData?.glaCoinBalance ?? glaCoinBalance}
+              totalGlaCoinEarned={dashboardData?.totalGlaCoinEarned ?? totalGlaCoinEarned}
+              glaCoinSpentOnHints={dashboardData?.glaCoinSpentOnHints ?? glaCoinSpentOnHints}
+              attempts={dashboardData?.attempts || attempts}
+              attemptStatsByProblem={dashboardData?.attemptStatsByProblem || attemptStatsByProblem}
+              bestScoringProblems={dashboardData?.bestScoringProblems || bestScoringProblems}
+              latestAttempt={dashboardData?.latestAttempt || latestAttempt}
+              onOpenCoinHistory={() => setScreen('coins')}
+              onOpenLatestScore={() => setScreen(latestAttempt ? 'score' : 'play')}
+              onOpenCertificate={() => setScreen('certificate')}
+              onOpenProfile={() => setScreen('profile')}
+            />
+          </>
+        )}
+
+        {screen === 'coins' && (
+          <CoinHistoryScreen
+            glaCoinBalance={glaCoinBalance}
+            totalGlaCoinEarned={totalGlaCoinEarned}
+            glaCoinSpentOnHints={glaCoinSpentOnHints}
+            coinTransactions={coinTransactions}
+            onBackToDashboard={() => setScreen('dashboard')}
+          />
+        )}
+
+        {screen === 'certificate' && (
+          <CertificateScreen
+            fullName={firestoreFullName || fullName}
+            completedProblems={dashboardData?.completedProblems ?? completedProblems}
+            averageScore={dashboardData?.averageScore ?? averageScore}
+            certificateUnlocked={firestoreCertificateUnlocked}
+            certificateId={dashboardData?.latestCertificate?.certificateId || certificateId}
+            issueDate={
+              dashboardData?.latestCertificate?.issuedAt?.toDate
+                ? dashboardData.latestCertificate.issuedAt.toDate().toLocaleDateString()
+                : issueDate
+            }
+            onBackToDashboard={() => setScreen('dashboard')}
+          />
+        )}
+
+        {screen === 'profile' && (
+          <>
+            {dashboardLoading && (
+              <p style={{ color: '#5c3512', fontWeight: 800 }}>
+                Loading profile data...
+              </p>
+            )}
+
+            {dashboardError && (
+              <p style={{ color: '#9a3412', fontWeight: 800 }}>
+                {dashboardError}
+              </p>
+            )}
+
+            <PlayerProfileScreen
+              profile={dashboardData?.profile || {}}
+              fullName={firestoreFullName || fullName}
+              email={dashboardData?.profile?.email || email}
+              firstName={dashboardData?.profile?.firstName || ''}
+              lastName={dashboardData?.profile?.lastName || ''}
+              phone={dashboardData?.profile?.phone || ''}
+              selectedProblemStack={firestoreSelectedProblemStack}
+              completedProblemRows={dashboardData?.completedProblemRows || completedProblemRows}
+              attempts={dashboardData?.attempts || attempts}
+              glaCoinBalance={dashboardData?.glaCoinBalance ?? glaCoinBalance}
+              totalGlaCoinEarned={dashboardData?.totalGlaCoinEarned ?? totalGlaCoinEarned}
+              totalGlaCoinSpent={dashboardData?.totalGlaCoinSpent ?? glaCoinSpentOnHints}
+              completedProblems={dashboardData?.completedProblems ?? completedProblems}
+              averageScore={dashboardData?.averageScore ?? averageScore}
+              certificateUnlocked={firestoreCertificateUnlocked}
+              profileSaving={profileSaving}
+              profileMessage={profileMessage}
+              onSaveProfile={handleSaveProfile}
+            />
+          </>
+        )}
+
+        {screen === 'achievements' && (
+          <AchievementsBadgesScreen
+            attempts={attempts}
+            completedProblems={completedProblems}
+            totalGlaCoinEarned={totalGlaCoinEarned}
+          />
+        )}
+
+        {screen === 'levels' && (
+          <LevelsProgressionScreen
+            totalGlaCoinEarned={totalGlaCoinEarned}
+            completedProblems={completedProblems}
+            averageScore={averageScore}
+          />
+        )}
+
+        {screen === 'leaderboard' && (
+          <LeaderboardScreen
+            fullName={fullName}
+            averageScore={averageScore}
+            completedProblems={completedProblems}
+            totalGlaCoinEarned={totalGlaCoinEarned}
+          />
+        )}
+
+        {screen === 'hints' && (
+          <HintCenterScreen
+            coinTransactions={coinTransactions}
+            glaCoinSpentOnHints={glaCoinSpentOnHints}
+          />
+        )}
+
+        {screen === 'analytics' && (
+          <>
+            {analyticsLoading && (
+              <p style={{ color: '#5c3512', fontWeight: 800 }}>
+                Loading analytics data...
+              </p>
+            )}
+
+            {analyticsError && (
+              <p style={{ color: '#9a3412', fontWeight: 800 }}>
+                {analyticsError}
+              </p>
+            )}
+
+            <AnalyticsDashboardScreen analyticsData={analyticsData} />
+          </>
+        )}
+
         {screen === 'multilingual' && <MultilingualScreen />}
-        {screen === 'accessibility' && <AccessibilityScreen settings={accessibilitySettings} onChange={updateAccessibilitySetting} onSaved={handleSettingsSaved} />}
-        {screen === 'designs' && <CardDesignShowcaseScreen problemCardBack={card2} aiCardBack={card1} cards={cards} aiCards={aiCards} />}
-        {screen === 'multiplayer' && <MultiplayerHubScreen fullName={fullName} />}
-        {screen === 'rewards' && <RewardsLaunchScreen completedProblems={completedProblems} averageScore={averageScore} certificateUnlocked={certificateUnlocked} />}
+
+        {screen === 'accessibility' && (
+          <AccessibilityScreen
+            settings={accessibilitySettings}
+            onChange={updateAccessibilitySetting}
+            onSaved={handleSettingsSaved}
+          />
+        )}
+
+        {screen === 'designs' && (
+          <CardDesignShowcaseScreen
+            problemCardBack={card2}
+            aiCardBack={card1}
+            cards={cards}
+            aiCards={availableAiCards}
+          />
+        )}
+
+        {screen === 'multiplayer' && (
+          <MultiplayerHubScreen fullName={fullName} />
+        )}
+
+        {screen === 'rewards' && (
+          <RewardsLaunchScreen
+            completedProblems={completedProblems}
+            averageScore={averageScore}
+            certificateUnlocked={certificateUnlocked}
+          />
+        )}
       </main>
     </section>
   )
 }
-
 const gameHomeWrapperStyle = { width: 'min(1450px, calc(100vw - 48px))', margin: '34px auto 0' }
 const pageCss = `
   .glaGamePageHeader { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; }
