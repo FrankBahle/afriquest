@@ -244,3 +244,42 @@ export async function uploadCertificateTemplateAsset({ assetType, file }) {
     fileName: file.name
   }
 }
+
+export async function getCardSkins() {
+  const snapshot = await getDocs(collection(db, COLLECTIONS.cardSkins))
+  return snapshot.docs
+    .map((documentSnapshot) => ({ firestoreId: documentSnapshot.id, ...documentSnapshot.data() }))
+    .filter((skin) => !String(skin.firestoreId || '').toLowerCase().includes('__schema'))
+    .sort((a, b) => Number(a.order || 99) - Number(b.order || 99))
+}
+
+export async function saveCardSkin(formValues) {
+  const title = cleanText(formValues.title)
+  if (!title) throw new Error('Card skin title is required.')
+
+  const skinId = cleanText(formValues.skinId || formValues.firestoreId) || cleanFileName(title).replace(/-/g, '_')
+  const data = {
+    skinId,
+    title,
+    description: cleanText(formValues.description),
+    cardType: cleanText(formValues.cardType || 'all'),
+    imageUrl: cleanText(formValues.imageUrl),
+    requiredLevel: Number(formValues.requiredLevel || 0),
+    requiredAchievementId: cleanText(formValues.requiredAchievementId),
+    requiredCompletedProblems: Number(formValues.requiredCompletedProblems || 0),
+    requiredAverageScore: Number(formValues.requiredAverageScore || 0),
+    isActive: formValues.isActive !== false,
+    order: Number(formValues.order || 99),
+    updatedAt: serverTimestamp()
+  }
+
+  await setDoc(doc(db, COLLECTIONS.cardSkins, skinId), data, { merge: true })
+  return { firestoreId: skinId, ...data }
+}
+
+export async function getUserCardSkins() {
+  const snapshot = await getDocs(collection(db, COLLECTIONS.userCardSkins))
+  return snapshot.docs
+    .map((documentSnapshot) => ({ firestoreId: documentSnapshot.id, ...documentSnapshot.data() }))
+    .filter((skin) => !String(skin.firestoreId || '').toLowerCase().includes('__schema'))
+}

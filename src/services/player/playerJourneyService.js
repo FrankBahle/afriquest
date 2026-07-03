@@ -36,6 +36,10 @@ function cleanData(value) {
   }
 
   if (value && typeof value === 'object') {
+    if (value instanceof Date || (value.constructor && value.constructor.name !== 'Object')) {
+      return value
+    }
+
     return Object.fromEntries(
       Object.entries(value)
         .filter(([, itemValue]) => itemValue !== undefined)

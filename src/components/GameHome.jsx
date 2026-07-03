@@ -279,7 +279,7 @@ setActiveSessionId(sessionId)
       else setScreen('play')
       return
     }
-    if (value === 'score' && !latestAttempt) return
+    if (value === 'score' && !firestoreLatestAttempt) return
     setScreen(value)
   }
 
@@ -500,7 +500,10 @@ async function handleSaveProfile(profileData) {
   setProfileMessage('')
 
   try {
-    await updatePlayerProfile(currentUser.uid, profileData)
+    await updatePlayerProfile(currentUser.uid, profileData, currentUser)
+    if (typeof currentUser.reload === 'function') {
+      await currentUser.reload()
+    }
     setProfileMessage('Profile updated successfully.')
     await loadPlayerDashboard()
   } catch (error) {
@@ -531,6 +534,32 @@ const firestoreFullName =
 const firestoreCertificateUnlocked =
   dashboardData?.certificateUnlocked ?? certificateUnlocked
 
+const firestoreCompletedProblems =
+  dashboardData?.completedProblems ?? completedProblems
+
+const firestoreAverageScore =
+  dashboardData?.averageScore ?? averageScore
+
+const firestoreCertificationProgress =
+  dashboardData?.certificationProgress ?? certificationProgress
+
+const firestoreGlaCoinBalance =
+  dashboardData?.glaCoinBalance ?? glaCoinBalance
+
+const firestoreTotalGlaCoinEarned =
+  dashboardData?.totalGlaCoinEarned ?? totalGlaCoinEarned
+
+const firestoreAttempts =
+  dashboardData?.attempts || attempts
+
+const firestoreLatestAttempt =
+  dashboardData?.latestAttempt || latestAttempt
+
+const firestoreLatestAttemptProblemStats =
+  firestoreLatestAttempt
+    ? dashboardData?.attemptStatsByProblem?.[firestoreLatestAttempt.problemId] ||
+      latestAttemptProblemStats
+    : latestAttemptProblemStats
 
 
 async function loadPlayerAnalytics() {
@@ -582,12 +611,12 @@ async function loadPlayerAnalytics() {
             onNavigate={handleSidebarNavigation}
             onClose={() => setSidebarOpen(false)}
             selectedProblemCount={selectedProblemIds.length}
-            completedProblems={completedProblems}
-            certificationProgress={certificationProgress}
-            averageScore={averageScore}
-            glaCoinBalance={glaCoinBalance}
-            certificateUnlocked={certificateUnlocked}
-            latestAttempt={latestAttempt}
+            completedProblems={firestoreCompletedProblems}
+            certificationProgress={firestoreCertificationProgress}
+            averageScore={firestoreAverageScore}
+            glaCoinBalance={firestoreGlaCoinBalance}
+            certificateUnlocked={firestoreCertificateUnlocked}
+            latestAttempt={firestoreLatestAttempt}
           />
         </div>
       </div>
@@ -613,7 +642,7 @@ async function loadPlayerAnalytics() {
             screen={screen}
             selectedProblemCount={selectedProblemIds.length}
             roundActive={Boolean(round.card)}
-            latestAttempt={latestAttempt}
+            latestAttempt={firestoreLatestAttempt}
             onNavigate={handleJourneyNavigation}
           />
         )}
@@ -669,7 +698,7 @@ async function loadPlayerAnalytics() {
             onConfirmHint={confirmHintPurchase}
             onOpenLatestScore={() => setScreen('score')}
             onNextRound={handleNextRound}
-            latestAttempt={latestAttempt}
+            latestAttempt={firestoreLatestAttempt}
             onGoToSelection={() => setScreen('select')}
             appSettings={accessibilitySettings}
           />
@@ -677,10 +706,10 @@ async function loadPlayerAnalytics() {
 
         {screen === 'score' && (
           <ScoringFeedbackScreen
-            currentAttempt={latestAttempt}
+            currentAttempt={firestoreLatestAttempt}
             currentProblem={round.card}
-            currentProblemAttemptStats={latestAttemptProblemStats}
-            glaCoinBalance={glaCoinBalance}
+            currentProblemAttemptStats={firestoreLatestAttemptProblemStats}
+            glaCoinBalance={firestoreGlaCoinBalance}
             onOpenRetry={() => setScreen('retry')}
             onNextProblem={handleNextRound}
             onOpenDashboard={() => setScreen('dashboard')}
@@ -693,7 +722,7 @@ async function loadPlayerAnalytics() {
             currentProblem={round.card}
             currentProblemAttemptStats={currentProblemAttemptStats}
             onStartRetry={handleRetryCurrentProblem}
-            onCancel={() => setScreen(latestAttempt ? 'score' : 'play')}
+            onCancel={() => setScreen(firestoreLatestAttempt ? 'score' : 'play')}
             onNextProblem={handleNextRound}
           />
         )}
@@ -726,9 +755,9 @@ async function loadPlayerAnalytics() {
               attempts={dashboardData?.attempts || attempts}
               attemptStatsByProblem={dashboardData?.attemptStatsByProblem || attemptStatsByProblem}
               bestScoringProblems={dashboardData?.bestScoringProblems || bestScoringProblems}
-              latestAttempt={dashboardData?.latestAttempt || latestAttempt}
+              latestAttempt={firestoreLatestAttempt}
               onOpenCoinHistory={() => setScreen('coins')}
-              onOpenLatestScore={() => setScreen(latestAttempt ? 'score' : 'play')}
+              onOpenLatestScore={() => setScreen(firestoreLatestAttempt ? 'score' : 'play')}
               onOpenCertificate={() => setScreen('certificate')}
               onOpenProfile={() => setScreen('profile')}
             />
@@ -737,9 +766,9 @@ async function loadPlayerAnalytics() {
 
         {screen === 'coins' && (
           <CoinHistoryScreen
-            glaCoinBalance={glaCoinBalance}
-            totalGlaCoinEarned={totalGlaCoinEarned}
-            glaCoinSpentOnHints={glaCoinSpentOnHints}
+            glaCoinBalance={firestoreGlaCoinBalance}
+            totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
+            glaCoinSpentOnHints={dashboardData?.glaCoinSpentOnHints ?? glaCoinSpentOnHints}
             coinTransactions={coinTransactions}
             onBackToDashboard={() => setScreen('dashboard')}
           />
@@ -800,25 +829,25 @@ async function loadPlayerAnalytics() {
 
         {screen === 'achievements' && (
           <AchievementsBadgesScreen
-            attempts={attempts}
-            completedProblems={completedProblems}
-            totalGlaCoinEarned={totalGlaCoinEarned}
+            attempts={firestoreAttempts}
+            completedProblems={firestoreCompletedProblems}
+            totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
           />
         )}
 
         {screen === 'levels' && (
           <LevelsProgressionScreen
-            totalGlaCoinEarned={totalGlaCoinEarned}
-            completedProblems={completedProblems}
-            averageScore={averageScore}
+            totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
+            completedProblems={firestoreCompletedProblems}
+            averageScore={firestoreAverageScore}
           />
         )}
 
         {screen === 'leaderboard' && (
           <LeaderboardScreen
-            fullName={fullName}
-            averageScore={averageScore}
-            completedProblems={completedProblems}
+            fullName={firestoreFullName || fullName}
+            averageScore={firestoreAverageScore}
+            completedProblems={firestoreCompletedProblems}
             totalGlaCoinEarned={totalGlaCoinEarned}
           />
         )}

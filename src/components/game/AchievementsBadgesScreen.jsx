@@ -198,13 +198,10 @@ function AchievementsBadgesScreen({
             {filteredAchievements.map((achievement) => (
               <div
                 key={achievement.achievementId}
-                style={{
-                  ...achievementCardStyle,
-                  opacity: achievement.unlocked ? 1 : 0.76
-                }}
+                style={getAchievementCardStyle(achievement.unlocked)}
               >
                 <div style={styles.rowBetween}>
-                  <div style={badgeIconStyle}>{achievement.icon || '🏅'}</div>
+                  <div style={getBadgeIconStyle(achievement.unlocked)}>{achievement.icon || '🏅'}</div>
 
                   <Pill tone={achievement.unlocked ? 'success' : 'default'}>
                     {achievement.unlocked ? 'Unlocked' : 'Locked'}
@@ -222,14 +219,14 @@ function AchievementsBadgesScreen({
                 <div style={progressTrackStyle}>
                   <div
                     style={{
-                      ...progressFillStyle,
-                      width: `${achievement.progressPercent || 0}%`
+                      ...getProgressFillStyle(achievement.unlocked),
+                      width: `${achievement.unlocked ? 100 : achievement.progressPercent || 0}%`
                     }}
                   />
                 </div>
 
                 <p style={{ ...styles.smallCardText, marginTop: 8 }}>
-                  Progress: {achievement.currentValue} / {achievement.targetValue}
+                  Progress: {achievement.unlocked ? achievement.targetValue : achievement.currentValue} / {achievement.targetValue}
                 </p>
 
                 <p style={{ ...styles.smallCardText, marginTop: 4 }}>
@@ -268,25 +265,39 @@ const achievementGridStyle = {
   gap: 16
 }
 
-const achievementCardStyle = {
-  padding: 18,
-  borderRadius: 24,
-  background: 'rgba(255, 255, 255, 0.66)',
-  border: '1px solid rgba(139, 92, 40, 0.16)',
-  boxShadow: '0 16px 36px rgba(80, 52, 20, 0.08)'
+function getAchievementCardStyle(unlocked) {
+  return {
+    padding: 18,
+    borderRadius: 24,
+    background: unlocked
+      ? 'linear-gradient(135deg, rgba(244,210,138,0.92), rgba(154,106,34,0.28))'
+      : 'rgba(255, 255, 255, 0.66)',
+    border: unlocked
+      ? '1px solid rgba(154, 106, 34, 0.48)'
+      : '1px solid rgba(139, 92, 40, 0.16)',
+    boxShadow: unlocked
+      ? '0 18px 42px rgba(154, 106, 34, 0.2)'
+      : '0 16px 36px rgba(80, 52, 20, 0.08)',
+    opacity: unlocked ? 1 : 0.76
+  }
 }
 
-const badgeIconStyle = {
-  width: 54,
-  height: 54,
-  borderRadius: 18,
-  display: 'grid',
-  placeItems: 'center',
-  background:
-    'linear-gradient(135deg, rgba(244,210,138,0.9), rgba(154,106,34,0.75))',
-  color: '#3b2817',
-  fontSize: '1.7rem',
-  boxShadow: '0 12px 28px rgba(80, 52, 20, 0.16)'
+function getBadgeIconStyle(unlocked) {
+  return {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    display: 'grid',
+    placeItems: 'center',
+    background: unlocked
+      ? 'linear-gradient(135deg, #f4d28a, #9a6a22)'
+      : 'linear-gradient(135deg, rgba(244,210,138,0.9), rgba(154,106,34,0.75))',
+    color: '#3b2817',
+    fontSize: '1.7rem',
+    boxShadow: unlocked
+      ? '0 14px 32px rgba(154, 106, 34, 0.28)'
+      : '0 12px 28px rgba(80, 52, 20, 0.16)'
+  }
 }
 
 const progressTrackStyle = {
@@ -297,10 +308,14 @@ const progressTrackStyle = {
   marginTop: 14
 }
 
-const progressFillStyle = {
-  height: '100%',
-  borderRadius: 999,
-  background: 'linear-gradient(135deg, #d4af37, #5c3512)'
+function getProgressFillStyle(unlocked) {
+  return {
+    height: '100%',
+    borderRadius: 999,
+    background: unlocked
+      ? 'linear-gradient(135deg, #f4d28a, #9a6a22)'
+      : 'linear-gradient(135deg, #d4af37, #5c3512)'
+  }
 }
 
 export default AchievementsBadgesScreen

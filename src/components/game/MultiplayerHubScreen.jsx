@@ -4,7 +4,7 @@ import { styles } from './gameStyles'
 import { Pill, SectionHeader } from './ui'
 import {
   createMultiplayerRoom,
-  getMultiplayerRooms,
+  getMultiplayerHubData,
   joinMultiplayerRoom,
   seedMultiplayerTableSamples
 } from '../../services/player/playerMultiplayerService'
@@ -13,7 +13,7 @@ import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
 function MultiplayerHubScreen({ fullName = 'Player' }) {
   const { currentUser } = useAuth()
   const { t } = usePlayerLanguage()
-  const [rooms, setRooms] = useState([])
+  const [hubData, setHubData] = useState({ rooms: [], roomPlayers: [], teams: [], teamSessions: [], debates: [], debateVotes: [], tournaments: [], tournamentPlayers: [] })
   const [roomName, setRoomName] = useState('')
   const [mode, setMode] = useState('challenge')
   const [maxPlayers, setMaxPlayers] = useState('4')
@@ -24,21 +24,21 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  async function loadRooms() {
+  async function loadHubData() {
     setLoading(true)
     setError('')
     try {
-      const rows = await getMultiplayerRooms()
-      setRooms(rows)
+      const data = await getMultiplayerHubData()
+      setHubData(data)
     } catch (err) {
-      setError(err.message || 'Could not load multiplayer rooms from Firebase.')
+      setError(err.message || 'Could not load multiplayer data from Firebase.')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadRooms()
+    loadHubData()
   }, [])
 
   async function handleCreateRoom(event) {
@@ -47,16 +47,10 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     setStatusMessage('')
 
     try {
-      await createMultiplayerRoom({
-        userId: currentUser?.uid,
-        displayName: fullName,
-        roomName,
-        mode,
-        maxPlayers
-      })
+      await createMultiplayerRoom({ userId: currentUser?.uid, displayName: fullName, roomName, mode, maxPlayers })
       setRoomName('')
-      setStatusMessage('Room created successfully.')
-      await loadRooms()
+      setStatusMessage('Room created successfully and saved to Firebase.')
+      await loadHubData()
     } catch (err) {
       setError(err.message || 'Could not create multiplayer room.')
     }
@@ -68,14 +62,10 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     setStatusMessage('')
 
     try {
-      await joinMultiplayerRoom({
-        userId: currentUser?.uid,
-        displayName: fullName,
-        roomCode: joinCode
-      })
+      await joinMultiplayerRoom({ userId: currentUser?.uid, displayName: fullName, roomCode: joinCode })
       setJoinCode('')
-      setStatusMessage('Room joined successfully.')
-      await loadRooms()
+      setStatusMessage('Room joined successfully and saved to Firebase.')
+      await loadHubData()
     } catch (err) {
       setError(err.message || 'Could not join multiplayer room.')
     }
@@ -86,12 +76,14 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     setStatusMessage('')
     try {
       const count = await seedMultiplayerTableSamples(currentUser?.uid || 'sample_user')
-      setStatusMessage(`${count} multiplayer table examples created.`)
-      await loadRooms()
+      setStatusMessage(`${count} multiplayer collection examples created.`)
+      await loadHubData()
     } catch (err) {
       setError(err.message || 'Could not create multiplayer table examples.')
     }
   }
+
+  const rooms = hubData.rooms || []
 
   const filteredRooms = useMemo(() => {
     const cleanSearch = searchTerm.trim().toLowerCase()
@@ -113,21 +105,14 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
       {statusMessage && <MessageCard message={statusMessage} tone="success" />}
 
       <div style={styles.metricGrid}>
-        <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>Rooms</p>
-          <h3 style={styles.smallCardTitle}>{rooms.length}</h3>
-          <p style={styles.smallCardText}>multiplayerRooms</p>
-        </div>
-        <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>Open Rooms</p>
-          <h3 style={styles.smallCardTitle}>{rooms.filter((room) => room.status === 'waiting').length}</h3>
-          <p style={styles.smallCardText}>Ready for players.</p>
-        </div>
-        <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>Modes</p>
-          <h3 style={styles.smallCardTitle}>4</h3>
-          <p style={styles.smallCardText}>Challenge, Team, Debate, Tournament.</p>
-        </div>
+        <Metric title="Rooms" value={rooms.length} note="multiplayerRooms" />
+        <Metric title="Room Players" value={hubData.roomPlayers.length} note="roomPlayers" />
+        <Metric title="Teams" value={hubData.teams.length} note="teams" />
+        <Metric title="Team Sessions" value={hubData.teamSessions.length} note="teamSessions" />
+        <Metric title="Debates" value={hubData.debates.length} note="debates" />
+        <Metric title="Debate Votes" value={hubData.debateVotes.length} note="debateVotes" />
+        <Metric title="Tournaments" value={hubData.tournaments.length} note="tournaments" />
+        <Metric title="Tournament Players" value={hubData.tournamentPlayers.length} note="tournamentPlayers" />
       </div>
 
       <div style={styles.twoColumnGrid}>
@@ -192,7 +177,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase multiplayerRooms collection</p>
+            <p style={styles.eyebrow}>Firebase multiplayer collections</p>
             <h3 style={styles.smallCardTitle}>Available rooms</h3>
           </div>
           <Pill>{loading ? 'Loading' : `${filteredRooms.length} rows`}</Pill>
@@ -222,6 +207,10 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
       </div>
     </div>
   )
+}
+
+function Metric({ title, value, note }) {
+  return <div style={styles.smallCard}><p style={styles.eyebrow}>{title}</p><h3 style={styles.smallCardTitle}>{value}</h3><p style={styles.smallCardText}>{note}</p></div>
 }
 
 function MessageCard({ message, tone }) {

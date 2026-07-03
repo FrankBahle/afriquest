@@ -1,4 +1,11 @@
 import {
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updateEmail,
+  updatePassword,
+  updateProfile
+} from 'firebase/auth'
+import {
   getDoc,
   getDocs,
   limit,
@@ -34,19 +41,13 @@ const defaultPlayerFields = {
 }
 
 function isPlainObject(value) {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
+  if (!value || typeof value !== 'object') return false
   const prototype = Object.getPrototypeOf(value)
-
   return prototype === Object.prototype || prototype === null
 }
 
 function cleanData(value) {
-  if (Array.isArray(value)) {
-    return value.map(cleanData)
-  }
+  if (Array.isArray(value)) return value.map(cleanData)
 
   if (isPlainObject(value)) {
     return Object.fromEntries(
@@ -59,17 +60,50 @@ function cleanData(value) {
   return value
 }
 
-export async function getPlayerProfile(userId) {
-  if (!userId) {
-    return null
+function cleanText(value) {
+  return String(value || '').trim()
+}
+
+function getFriendlyAuthError(error) {
+  const code = error?.code || ''
+
+  if (code === 'auth/requires-recent-login') {
+    return 'For security, Firebase needs you to log out and log in again before changing your email or password.'
   }
+
+  if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+    return 'The current password is incorrect.'
+  }
+
+  if (code === 'auth/email-already-in-use') {
+    return 'That email address is already being used by another account.'
+  }
+
+  if (code === 'auth/invalid-email') {
+    return 'Please enter a valid email address.'
+  }
+
+  if (code === 'auth/weak-password') {
+    return 'The new password is too weak. Use at least 6 characters.'
+  }
+
+  return error?.message || 'Could not update profile.'
+}
+
+async function reauthenticateIfNeeded(authUser, currentPassword) {
+  if (!authUser?.email || !currentPassword) return
+
+  const credential = EmailAuthProvider.credential(authUser.email, currentPassword)
+  await reauthenticateWithCredential(authUser, credential)
+}
+
+export async function getPlayerProfile(userId) {
+  if (!userId) return null
 
   const userRef = getUserRef(userId)
   const userSnap = await getDoc(userRef)
 
-  if (!userSnap.exists()) {
-    return null
-  }
+  if (!userSnap.exists()) return null
 
   return {
     id: userSnap.id,
@@ -80,17 +114,13 @@ export async function getPlayerProfile(userId) {
 export async function getPlayerSelectedProblemStack(profile) {
   const stackId = profile?.currentProblemStackId
 
-  if (!stackId) {
-    return null
-  }
+  if (!stackId) return null
 
   const stackSnap = await getDoc(
     playerDoc(PLAYER_COLLECTIONS.selectedProblemStacks, stackId)
   )
 
-  if (!stackSnap.exists()) {
-    return null
-  }
+  if (!stackSnap.exists()) return null
 
   return {
     id: stackSnap.id,
@@ -145,14 +175,10 @@ export async function ensurePlayerProfile({
     const missingFields = {}
 
     Object.entries(defaultPlayerFields).forEach(([key, value]) => {
-      if (existingProfile[key] === undefined) {
-        missingFields[key] = value
-      }
+      if (existingProfile[key] === undefined) missingFields[key] = value
     })
 
-    if (existingProfile.userId === undefined) {
-      missingFields.userId = userId
-    }
+    if (existingProfile.userId === undefined) missingFields.userId = userId
 
     if (Object.keys(missingFields).length > 0) {
       await setDoc(
@@ -168,25 +194,44 @@ export async function ensurePlayerProfile({
     return getPlayerProfile(userId)
   }
 
-  return createOrUpdatePlayerProfile({
-    userId,
-    firstName,
-    lastName,
-    phone,
-    email
-  })
+  return createOrUpdatePlayerProfile({ userId, firstName, lastName, phone, email })
 }
 
-export async function updatePlayerProfile(userId, profileData) {
-  if (!userId) {
-    throw new Error('User ID is required to update player profile.')
+export async function updatePlayerProfile(userId, profileData, authUser = null) {
+  if (!userId) throw new Error('User ID is required to update player profile.')
+
+  const firstName = cleanText(profileData.firstName)
+  const lastName = cleanText(profileData.lastName)
+  const phone = cleanText(profileData.phone)
+  const displayName = cleanText(profileData.displayName || `${firstName} ${lastName}`)
+  const nextEmail = cleanText(profileData.email)
+  const currentPassword = String(profileData.currentPassword || '')
+  const newPassword = String(profileData.newPassword || '')
+
+  try {
+    if (authUser && displayName && displayName !== authUser.displayName) {
+      await updateProfile(authUser, { displayName })
+    }
+
+    if (authUser && nextEmail && nextEmail !== authUser.email) {
+      await reauthenticateIfNeeded(authUser, currentPassword)
+      await updateEmail(authUser, nextEmail)
+    }
+
+    if (authUser && newPassword) {
+      await reauthenticateIfNeeded(authUser, currentPassword)
+      await updatePassword(authUser, newPassword)
+    }
+  } catch (error) {
+    throw new Error(getFriendlyAuthError(error))
   }
 
   const allowedFields = {
-    firstName: profileData.firstName,
-    lastName: profileData.lastName,
-    phone: profileData.phone,
-    displayName: profileData.displayName
+    firstName,
+    lastName,
+    phone,
+    email: nextEmail || authUser?.email || profileData.email || '',
+    displayName
   }
 
   const cleanedFields = cleanData(allowedFields)
@@ -203,9 +248,7 @@ export async function updatePlayerProfile(userId, profileData) {
 }
 
 export async function updatePlayerProgressSummary(userId, summaryData) {
-  if (!userId) {
-    throw new Error('User ID is required to update player progress.')
-  }
+  if (!userId) throw new Error('User ID is required to update player progress.')
 
   const allowedFields = {
     glaCoinBalance: summaryData.glaCoinBalance,
@@ -232,13 +275,9 @@ export async function updatePlayerProgressSummary(userId, summaryData) {
 }
 
 export async function updatePlayerActiveSession(userId, activeSessionId) {
-  if (!userId) {
-    throw new Error('User ID is required to update active session.')
-  }
+  if (!userId) throw new Error('User ID is required to update active session.')
 
-  const userRef = getUserRef(userId)
-
-  await updateDoc(userRef, {
+  await updateDoc(getUserRef(userId), {
     activeSessionId,
     updatedAt: now()
   })
@@ -247,13 +286,9 @@ export async function updatePlayerActiveSession(userId, activeSessionId) {
 }
 
 export async function updatePlayerCurrentProblemStack(userId, currentProblemStackId) {
-  if (!userId) {
-    throw new Error('User ID is required to update current problem stack.')
-  }
+  if (!userId) throw new Error('User ID is required to update current problem stack.')
 
-  const userRef = getUserRef(userId)
-
-  await updateDoc(userRef, {
+  await updateDoc(getUserRef(userId), {
     currentProblemStackId,
     updatedAt: now()
   })
@@ -261,16 +296,14 @@ export async function updatePlayerCurrentProblemStack(userId, currentProblemStac
   return currentProblemStackId
 }
 
-export async function getPlayerRecentAttempts(userId, resultLimit = 10) {
-  if (!userId) {
-    return []
-  }
+export async function getPlayerAttempts(userId, maxResults = 20) {
+  if (!userId) return []
 
   const attemptsQuery = query(
     playerCollection(PLAYER_COLLECTIONS.attempts),
     where('userId', '==', userId),
     orderBy('createdAt', 'desc'),
-    limit(resultLimit)
+    limit(maxResults)
   )
 
   const attemptsSnap = await getDocs(attemptsQuery)
@@ -279,59 +312,4 @@ export async function getPlayerRecentAttempts(userId, resultLimit = 10) {
     id: attemptDoc.id,
     ...attemptDoc.data()
   }))
-}
-
-export async function getPlayerCertificates(userId) {
-  if (!userId) {
-    return []
-  }
-
-  const certificatesQuery = query(
-    playerCollection(PLAYER_COLLECTIONS.certificates),
-    where('userId', '==', userId),
-    orderBy('issuedAt', 'desc')
-  )
-
-  const certificatesSnap = await getDocs(certificatesQuery)
-
-  return certificatesSnap.docs.map((certificateDoc) => ({
-    id: certificateDoc.id,
-    ...certificateDoc.data()
-  }))
-}
-
-export async function getPlayerCoinTransactions(userId, resultLimit = 20) {
-  if (!userId) {
-    return []
-  }
-
-  const transactionsQuery = query(
-    playerCollection(PLAYER_COLLECTIONS.glaCoinTransactions),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(resultLimit)
-  )
-
-  const transactionsSnap = await getDocs(transactionsQuery)
-
-  return transactionsSnap.docs.map((transactionDoc) => ({
-    id: transactionDoc.id,
-    ...transactionDoc.data()
-  }))
-}
-
-export async function getPlayerFullProfile(userId) {
-  const profile = await getPlayerProfile(userId)
-  const selectedProblemStack = await getPlayerSelectedProblemStack(profile)
-  const recentAttempts = await getPlayerRecentAttempts(userId)
-  const certificates = await getPlayerCertificates(userId)
-  const coinTransactions = await getPlayerCoinTransactions(userId)
-
-  return {
-    profile,
-    selectedProblemStack,
-    recentAttempts,
-    certificates,
-    coinTransactions
-  }
 }

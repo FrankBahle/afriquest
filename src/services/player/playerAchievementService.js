@@ -459,6 +459,13 @@ export async function syncPlayerAchievements({
       const existing = existingMap[safeAchievement.achievementId]
       const documentId = `${userId}_${safeAchievement.achievementId}`
 
+      const alreadyUnlocked = Boolean(existing?.unlocked)
+      const unlocked = alreadyUnlocked || progress.unlocked
+      const displayedCurrentValue = unlocked
+        ? progress.targetValue
+        : progress.currentValue
+      const displayedProgressPercent = unlocked ? 100 : progress.progressPercent
+
       const playerAchievementData = {
         userId,
         achievementId: safeAchievement.achievementId,
@@ -468,12 +475,12 @@ export async function syncPlayerAchievements({
         category: safeAchievement.category,
         rewardCoin: safeAchievement.rewardCoin,
         conditionType: safeAchievement.conditionType,
-        currentValue: progress.currentValue,
+        currentValue: displayedCurrentValue,
         targetValue: progress.targetValue,
-        progressPercent: progress.progressPercent,
-        unlocked: progress.unlocked,
+        progressPercent: displayedProgressPercent,
+        unlocked,
         unlockedAt:
-          progress.unlocked && !existing?.unlocked
+          unlocked && !existing?.unlocked
             ? serverTimestamp()
             : existing?.unlockedAt || null,
         updatedAt: serverTimestamp()

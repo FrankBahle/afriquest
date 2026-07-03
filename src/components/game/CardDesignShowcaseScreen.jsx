@@ -1,27 +1,38 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
 import { Pill, SectionHeader } from './ui'
-import { getPlayerCardDesigns } from '../../services/player/playerCardDesignService'
+import {
+  equipPlayerCardSkin,
+  getPlayerCardDesigns,
+  unlockPlayerCardSkin
+} from '../../services/player/playerCardDesignService'
 import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
 
 function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
+  const { currentUser } = useAuth()
   const { t } = usePlayerLanguage()
   const [problemCards, setProblemCards] = useState([])
   const [aiCards, setAiCards] = useState([])
+  const [cardSkins, setCardSkins] = useState([])
+  const [userCardSkins, setUserCardSkins] = useState([])
   const [cardTypeFilter, setCardTypeFilter] = useState('all')
   const [imageFilter, setImageFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
 
   async function loadDesigns() {
     setLoading(true)
     setError('')
 
     try {
-      const data = await getPlayerCardDesigns()
+      const data = await getPlayerCardDesigns(currentUser?.uid || '')
       setProblemCards(data.problemCards)
       setAiCards(data.aiCards)
+      setCardSkins(data.cardSkins)
+      setUserCardSkins(data.userCardSkins)
     } catch (err) {
       setError(err.message || 'Could not load card design data from Firebase.')
     } finally {
@@ -31,7 +42,31 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
 
   useEffect(() => {
     loadDesigns()
-  }, [])
+  }, [currentUser?.uid])
+
+  async function handleUnlockSkin(skin) {
+    setError('')
+    setStatusMessage('')
+    try {
+      await unlockPlayerCardSkin({ userId: currentUser?.uid, skin })
+      setStatusMessage('Card skin unlocked and saved to userCardSkins.')
+      await loadDesigns()
+    } catch (err) {
+      setError(err.message || 'Could not unlock this card skin.')
+    }
+  }
+
+  async function handleEquipSkin(skin) {
+    setError('')
+    setStatusMessage('')
+    try {
+      await equipPlayerCardSkin({ userId: currentUser?.uid, skinId: skin.skinId })
+      setStatusMessage('Card skin equipped and saved to Firebase.')
+      await loadDesigns()
+    } catch (err) {
+      setError(err.message || 'Could not equip this card skin.')
+    }
+  }
 
   const allCards = useMemo(() => [...problemCards, ...aiCards], [problemCards, aiCards])
 
@@ -54,28 +89,52 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
         {t('cardDesignHelp')}
       </SectionHeader>
 
-      {error && (
-        <div style={{ ...styles.smallCard, marginTop: 18, borderColor: 'rgba(153, 27, 27, 0.28)' }}>
-          <p style={{ ...styles.smallCardText, color: '#991b1b' }}>{error}</p>
-        </div>
-      )}
+      {error && <MessageCard message={error} tone="error" />}
+      {statusMessage && <MessageCard message={statusMessage} tone="success" />}
 
       <div style={styles.metricGrid}>
-        <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>{t('problemCards')}</p>
-          <h3 style={styles.smallCardTitle}>{problemCards.length}</h3>
-          <p style={styles.smallCardText}>problemCards</p>
+        <Metric title={t('problemCards')} value={problemCards.length} note="problemCards" />
+        <Metric title={t('aiCards')} value={aiCards.length} note="aiCards" />
+        <Metric title="Card Skins" value={cardSkins.length} note="cardSkins" />
+        <Metric title="Your Skins" value={userCardSkins.length} note="userCardSkins" />
+      </div>
+
+      <div style={{ ...styles.smallCard, marginTop: 18 }}>
+        <div style={styles.rowBetween}>
+          <div>
+            <p style={styles.eyebrow}>Unlockable card skins</p>
+            <h3 style={styles.smallCardTitle}>Firebase cardSkins and userCardSkins</h3>
+          </div>
+          <Pill>{cardSkins.length} skins</Pill>
         </div>
-        <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>{t('aiCards')}</p>
-          <h3 style={styles.smallCardTitle}>{aiCards.length}</h3>
-          <p style={styles.smallCardText}>aiCards</p>
-        </div>
-        <div style={styles.smallCard}>
-          <p style={styles.eyebrow}>Cards with images</p>
-          <h3 style={styles.smallCardTitle}>{allCards.filter((card) => card.frontImageUrl || card.backImageUrl).length}</h3>
-          <p style={styles.smallCardText}>frontImageUrl / backImageUrl</p>
-        </div>
+
+        {loading ? (
+          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading card skins from Firebase...</p>
+        ) : cardSkins.length === 0 ? (
+          <p style={{ ...styles.smallCardText, marginTop: 14 }}>No card skins found yet. Admin can add them in card design management.</p>
+        ) : (
+          <div style={skinGridStyle}>
+            {cardSkins.map((skin) => (
+              <article key={skin.skinId} style={skin.equipped ? equippedSkinCardStyle : skinCardStyle}>
+                <div style={styles.rowBetween}>
+                  <div>
+                    <p style={styles.eyebrow}>{skin.cardType}</p>
+                    <h3 style={styles.smallCardTitle}>{skin.title}</h3>
+                  </div>
+                  <Pill tone={skin.owned ? 'success' : 'default'}>{skin.equipped ? 'Equipped' : skin.owned ? 'Unlocked' : 'Locked'}</Pill>
+                </div>
+                {skin.imageUrl && <img src={skin.imageUrl} alt={skin.title} style={skinImageStyle} />}
+                <p style={styles.smallCardText}>{skin.description}</p>
+                <p style={styles.smallCardText}>Needs level {skin.requiredLevel || 0} • {skin.requiredCompletedProblems || 0} completed • {skin.requiredAverageScore || 0}% average</p>
+                {skin.owned ? (
+                  <button type="button" onClick={() => handleEquipSkin(skin)} disabled={skin.equipped} style={skin.equipped ? disabledButtonStyle : primaryButtonStyle}>{skin.equipped ? 'Equipped' : 'Equip skin'}</button>
+                ) : (
+                  <button type="button" onClick={() => handleUnlockSkin(skin)} style={secondaryButtonStyle}>Unlock manually</button>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
@@ -144,6 +203,15 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
   )
 }
 
+function Metric({ title, value, note }) {
+  return <div style={styles.smallCard}><p style={styles.eyebrow}>{title}</p><h3 style={styles.smallCardTitle}>{value}</h3><p style={styles.smallCardText}>{note}</p></div>
+}
+
+function MessageCard({ message, tone }) {
+  const isError = tone === 'error'
+  return <div style={{ ...styles.smallCard, marginTop: 18, borderColor: isError ? 'rgba(153, 27, 27, 0.28)' : 'rgba(22, 101, 52, 0.28)' }}><p style={{ ...styles.smallCardText, color: isError ? '#991b1b' : '#166534' }}>{message}</p></div>
+}
+
 function ImagePreview({ src, label }) {
   return (
     <div style={imagePreviewStyle}>
@@ -156,9 +224,16 @@ function ImagePreview({ src, label }) {
 const filterGridStyle = { marginTop: 16, display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 190px 190px', gap: 12 }
 const inputStyle = { width: '100%', padding: '13px 15px', borderRadius: 16, border: '1px solid rgba(139, 92, 40, 0.24)', background: 'rgba(255, 255, 255, 0.76)', color: '#3b2817', outline: 'none' }
 const galleryGridStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }
+const skinGridStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }
 const cardBoxStyle = { padding: 18, borderRadius: 24, background: 'rgba(255,255,255,0.66)', border: '1px solid rgba(139, 92, 40, 0.16)', boxShadow: '0 16px 36px rgba(80, 52, 20, 0.08)' }
+const skinCardStyle = { ...cardBoxStyle, display: 'grid', gap: 12 }
+const equippedSkinCardStyle = { ...skinCardStyle, background: 'linear-gradient(135deg, rgba(244,210,138,0.92), rgba(154,106,34,0.2))', border: '1px solid rgba(154,106,34,0.44)' }
 const imagePairStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }
 const imagePreviewStyle = { position: 'relative', minHeight: 160, borderRadius: 20, overflow: 'hidden', background: 'rgba(244,210,138,0.18)', border: '1px solid rgba(139,92,40,0.16)', display: 'grid', placeItems: 'center', color: '#5c3512', fontWeight: 850 }
 const imageStyle = { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }
+const skinImageStyle = { width: '100%', height: 150, objectFit: 'cover', borderRadius: 18, border: '1px solid rgba(139,92,40,0.16)' }
+const primaryButtonStyle = { border: 0, borderRadius: 999, padding: '12px 16px', cursor: 'pointer', background: 'linear-gradient(135deg, #9a6a22, #5c3512)', color: '#fff8eb', fontWeight: 850 }
+const secondaryButtonStyle = { border: '1px solid rgba(139, 92, 40, 0.22)', borderRadius: 999, padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.72)', color: '#5c3512', fontWeight: 850 }
+const disabledButtonStyle = { ...secondaryButtonStyle, opacity: 0.55, cursor: 'not-allowed' }
 
 export default CardDesignShowcaseScreen

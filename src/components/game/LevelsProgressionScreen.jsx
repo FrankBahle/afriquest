@@ -237,10 +237,7 @@ function LevelsProgressionScreen({
           {filteredLevels.map((level) => (
             <div
               key={level.levelId}
-              style={{
-                ...levelCardStyle,
-                opacity: level.unlocked ? 1 : 0.74
-              }}
+              style={level.unlocked ? unlockedLevelCardStyle : { ...levelCardStyle, opacity: 0.74 }}
             >
               <div style={styles.rowBetween}>
                 <div style={levelBadgeStyle}>{level.badge}</div>
@@ -267,11 +264,11 @@ function LevelsProgressionScreen({
               </div>
 
               <div style={requirementListStyle}>
-                <p>GLA Coin: {totalGlaCoinEarned} / {level.requiredCoin}</p>
+                <p>GLA Coin: {level.displayedCoin ?? totalGlaCoinEarned} / {level.requiredCoin}</p>
                 <p>
-                  Completed: {completedProblems} / {level.requiredCompletedProblems}
+                  Completed: {level.displayedCompleted ?? completedProblems} / {level.requiredCompletedProblems}
                 </p>
-                <p>Average: {averageScore}% / {level.requiredAverageScore}%</p>
+                <p>Average: {level.displayedAverage ?? averageScore}% / {level.requiredAverageScore}%</p>
               </div>
             </div>
           ))}
@@ -342,6 +339,13 @@ const levelCardStyle = {
   background: 'rgba(255, 255, 255, 0.66)',
   border: '1px solid rgba(139, 92, 40, 0.16)',
   boxShadow: '0 16px 36px rgba(80, 52, 20, 0.08)'
+}
+
+const unlockedLevelCardStyle = {
+  ...levelCardStyle,
+  background: 'linear-gradient(135deg, rgba(244, 210, 138, 0.96), rgba(154, 106, 34, 0.24))',
+  border: '1px solid rgba(154, 106, 34, 0.42)',
+  boxShadow: '0 18px 38px rgba(154, 106, 34, 0.18)'
 }
 
 const levelBadgeStyle = {

@@ -53,6 +53,19 @@ async function getPlayerCollectionRows(collectionName, userId) {
   }))
 }
 
+export async function getPlayerDashboardSelectedProblemStack(userId) {
+  const stacks = await getPlayerCollectionRows(
+    PLAYER_COLLECTIONS.selectedProblemStacks,
+    userId
+  )
+
+  const activeStacks = stacks.filter(
+    (stack) => stack.isActive !== false && stack.status !== 'archived'
+  )
+
+  return sortNewestFirst(activeStacks)[0] || sortNewestFirst(stacks)[0] || null
+}
+
 export async function getPlayerDashboardAttempts(userId) {
   const attempts = await getPlayerCollectionRows(
     PLAYER_COLLECTIONS.attempts,
@@ -277,7 +290,8 @@ export function buildPlayerDashboardSummary({
   coinTransactions,
   certificates,
   playerAchievements,
-  availableAchievements
+  availableAchievements,
+  selectedProblemStack
 }) {
   const attemptRows = buildAttemptRows(attempts, scores)
   const problemStats = buildProblemStats(attemptRows)
@@ -300,6 +314,7 @@ export function buildPlayerDashboardSummary({
 
   return {
     profile,
+    selectedProblemStack,
     attempts: attemptRows,
     scores,
     coinTransactions,
@@ -345,7 +360,8 @@ export async function getPlayerDashboardData(userId) {
     coinTransactions,
     certificates,
     playerAchievements,
-    availableAchievements
+    availableAchievements,
+    selectedProblemStack
   ] = await Promise.all([
     getPlayerProfile(userId),
     getPlayerDashboardAttempts(userId),
@@ -353,7 +369,8 @@ export async function getPlayerDashboardData(userId) {
     getPlayerDashboardCoinTransactions(userId),
     getPlayerDashboardCertificates(userId),
     getPlayerDashboardAchievements(userId),
-    getAvailableAchievements()
+    getAvailableAchievements(),
+    getPlayerDashboardSelectedProblemStack(userId)
   ])
 
   await logDashboardViewed(userId)
@@ -365,6 +382,7 @@ export async function getPlayerDashboardData(userId) {
     coinTransactions,
     certificates,
     playerAchievements,
-    availableAchievements
+    availableAchievements,
+    selectedProblemStack
   })
 }

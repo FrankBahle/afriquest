@@ -1,13 +1,5 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  serverTimestamp,
-  setDoc,
-  updateDoc
-} from 'firebase/firestore'
-import { COLLECTIONS, db } from '../firebaseService'
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import { COLLECTIONS, cleanFirestoreData, db, isSchemaDocument } from '../firebaseService'
 
 function cleanText(value) {
   return String(value || '').trim()
@@ -24,42 +16,64 @@ function toMillis(value) {
   return Date.parse(value) || 0
 }
 
-function isSchemaDocument(row) {
-  const id = cleanText(row.firestoreId || row.roomId).toLowerCase()
-  return id === '__schema' || id.includes('__schema') || id.includes('sample')
-}
-
 async function getCollectionRows(collectionName) {
   const snapshot = await getDocs(collection(db, collectionName))
   return snapshot.docs.map((documentSnapshot) => ({ firestoreId: documentSnapshot.id, ...documentSnapshot.data() }))
 }
 
-export async function getMultiplayerRooms() {
-  const [rooms, players] = await Promise.all([
+function getRoomId(row) {
+  return cleanText(row.roomId || row.firestoreId)
+}
+
+function normaliseRoom(room, players = []) {
+  const roomId = getRoomId(room)
+  const roomPlayers = players.filter((player) => String(player.roomId) === String(roomId))
+  return {
+    roomId,
+    roomCode: room.roomCode || room.firestoreId,
+    roomName: room.roomName || room.title || 'Multiplayer Room',
+    mode: room.mode || room.roomType || 'challenge',
+    status: room.status || room.roomStatus || 'waiting',
+    maxPlayers: Number(room.maxPlayers || 4),
+    playerCount: Number(room.playerCount || roomPlayers.length),
+    createdBy: room.createdBy || '',
+    createdByName: room.createdByName || 'Player',
+    createdAtMillis: toMillis(room.createdAt),
+    currentProblemId: room.currentProblemId || '',
+    roomPlayers
+  }
+}
+
+export async function getMultiplayerHubData() {
+  const [rooms, players, teams, teamSessions, debates, debateVotes, tournaments, tournamentPlayers] = await Promise.all([
     getCollectionRows(COLLECTIONS.multiplayerRooms),
-    getCollectionRows(COLLECTIONS.roomPlayers)
+    getCollectionRows(COLLECTIONS.roomPlayers),
+    getCollectionRows(COLLECTIONS.teams),
+    getCollectionRows(COLLECTIONS.teamSessions),
+    getCollectionRows(COLLECTIONS.debates),
+    getCollectionRows(COLLECTIONS.debateVotes),
+    getCollectionRows(COLLECTIONS.tournaments),
+    getCollectionRows(COLLECTIONS.tournamentPlayers)
   ])
 
-  return rooms
-    .filter((room) => !isSchemaDocument(room))
-    .map((room) => {
-      const roomPlayers = players.filter((player) => String(player.roomId) === String(room.roomId || room.firestoreId))
-      return {
-        roomId: room.roomId || room.firestoreId,
-        roomCode: room.roomCode || room.firestoreId,
-        roomName: room.roomName || 'Multiplayer Room',
-        mode: room.mode || 'challenge',
-        status: room.status || 'waiting',
-        maxPlayers: Number(room.maxPlayers || 4),
-        playerCount: Number(room.playerCount || roomPlayers.length),
-        createdBy: room.createdBy || '',
-        createdByName: room.createdByName || 'Player',
-        createdAtMillis: toMillis(room.createdAt),
-        currentProblemId: room.currentProblemId || '',
-        roomPlayers
-      }
-    })
-    .sort((a, b) => b.createdAtMillis - a.createdAtMillis)
+  const cleanPlayers = players.filter((row) => !isSchemaDocument(row))
+  const cleanRooms = rooms.filter((row) => !isSchemaDocument(row)).map((room) => normaliseRoom(room, cleanPlayers)).sort((a, b) => b.createdAtMillis - a.createdAtMillis)
+
+  return {
+    rooms: cleanRooms,
+    roomPlayers: cleanPlayers,
+    teams: teams.filter((row) => !isSchemaDocument(row)),
+    teamSessions: teamSessions.filter((row) => !isSchemaDocument(row)),
+    debates: debates.filter((row) => !isSchemaDocument(row)),
+    debateVotes: debateVotes.filter((row) => !isSchemaDocument(row)),
+    tournaments: tournaments.filter((row) => !isSchemaDocument(row)),
+    tournamentPlayers: tournamentPlayers.filter((row) => !isSchemaDocument(row))
+  }
+}
+
+export async function getMultiplayerRooms() {
+  const data = await getMultiplayerHubData()
+  return data.rooms
 }
 
 export async function createMultiplayerRoom({ userId, displayName, roomName, mode, maxPlayers }) {
@@ -71,7 +85,7 @@ export async function createMultiplayerRoom({ userId, displayName, roomName, mod
   const safeMode = cleanText(mode) || 'challenge'
   const safeMaxPlayers = Number(maxPlayers || 4)
 
-  await setDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), {
+  await setDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), cleanFirestoreData({
     roomId,
     roomCode,
     roomName: safeRoomName,
@@ -84,9 +98,9 @@ export async function createMultiplayerRoom({ userId, displayName, roomName, mod
     currentProblemId: '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  })
+  }))
 
-  await setDoc(doc(db, COLLECTIONS.roomPlayers, `${roomId}_${userId}`), {
+  await setDoc(doc(db, COLLECTIONS.roomPlayers, `${roomId}_${userId}`), cleanFirestoreData({
     roomPlayerId: `${roomId}_${userId}`,
     roomId,
     roomCode,
@@ -98,7 +112,54 @@ export async function createMultiplayerRoom({ userId, displayName, roomName, mod
     score: 0,
     joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  })
+  }))
+
+  if (safeMode === 'team') {
+    await setDoc(doc(db, COLLECTIONS.teams, `${roomId}_team_1`), cleanFirestoreData({
+      teamId: `${roomId}_team_1`,
+      roomId,
+      teamName: `${safeRoomName} Team`,
+      teamScore: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }), { merge: true })
+  }
+
+  if (safeMode === 'debate') {
+    await setDoc(doc(db, COLLECTIONS.debates, `${roomId}_debate`), cleanFirestoreData({
+      debateId: `${roomId}_debate`,
+      roomId,
+      prompt: 'Debate prompt will be selected during play.',
+      status: 'open',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }), { merge: true })
+  }
+
+  if (safeMode === 'tournament') {
+    await setDoc(doc(db, COLLECTIONS.tournaments, `${roomId}_tournament`), cleanFirestoreData({
+      tournamentId: `${roomId}_tournament`,
+      roomId,
+      title: safeRoomName,
+      status: 'planning',
+      roundCount: 1,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }), { merge: true })
+
+    await setDoc(doc(db, COLLECTIONS.tournamentPlayers, `${roomId}_${userId}`), cleanFirestoreData({
+      tournamentPlayerId: `${roomId}_${userId}`,
+      tournamentId: `${roomId}_tournament`,
+      userId,
+      displayName: cleanText(displayName) || 'Player',
+      totalScore: 0,
+      averageScore: 0,
+      completedRounds: 0,
+      rank: 0,
+      joinedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }), { merge: true })
+  }
 
   return roomId
 }
@@ -110,7 +171,6 @@ export async function joinMultiplayerRoom({ userId, displayName, roomCode }) {
 
   const roomId = safeRoomCode.startsWith('ROOM_') ? safeRoomCode.toLowerCase() : `room_${safeRoomCode}`
   const roomSnapshot = await getDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId))
-
   if (!roomSnapshot.exists()) throw new Error('Room was not found.')
 
   const room = roomSnapshot.data()
@@ -118,7 +178,7 @@ export async function joinMultiplayerRoom({ userId, displayName, roomCode }) {
   const maxPlayers = Number(room.maxPlayers || 4)
   if (playerCount >= maxPlayers) throw new Error('This room is already full.')
 
-  await setDoc(doc(db, COLLECTIONS.roomPlayers, `${roomId}_${userId}`), {
+  await setDoc(doc(db, COLLECTIONS.roomPlayers, `${roomId}_${userId}`), cleanFirestoreData({
     roomPlayerId: `${roomId}_${userId}`,
     roomId,
     roomCode: room.roomCode || safeRoomCode,
@@ -130,7 +190,22 @@ export async function joinMultiplayerRoom({ userId, displayName, roomCode }) {
     score: 0,
     joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  }, { merge: true })
+  }), { merge: true })
+
+  if (room.mode === 'tournament') {
+    await setDoc(doc(db, COLLECTIONS.tournamentPlayers, `${roomId}_${userId}`), cleanFirestoreData({
+      tournamentPlayerId: `${roomId}_${userId}`,
+      tournamentId: `${roomId}_tournament`,
+      userId,
+      displayName: cleanText(displayName) || 'Player',
+      totalScore: 0,
+      averageScore: 0,
+      completedRounds: 0,
+      rank: 0,
+      joinedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }), { merge: true })
+  }
 
   await updateDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), {
     playerCount: playerCount + 1,
@@ -143,7 +218,7 @@ export async function joinMultiplayerRoom({ userId, displayName, roomCode }) {
 export async function seedMultiplayerTableSamples(userId = 'sample_user') {
   const roomId = 'room_SAMPLE'
 
-  await setDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), {
+  await setDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), cleanFirestoreData({
     roomId,
     roomCode: 'SAMPLE',
     roomName: 'Sample Challenge Room',
@@ -156,34 +231,28 @@ export async function seedMultiplayerTableSamples(userId = 'sample_user') {
     currentProblemId: '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  }, { merge: true })
+  }), { merge: true })
 
-  await setDoc(doc(db, COLLECTIONS.teams, 'team_SAMPLE'), {
+  await setDoc(doc(db, COLLECTIONS.roomPlayers, `${roomId}_${userId}`), cleanFirestoreData({
+    roomPlayerId: `${roomId}_${userId}`,
+    roomId,
+    roomCode: 'SAMPLE',
+    userId,
+    displayName: 'Sample Player',
+    role: 'host',
     teamId: 'team_SAMPLE',
-    roomId,
-    teamName: 'Sample Team',
-    teamScore: 0,
-    createdAt: serverTimestamp(),
+    status: 'joined',
+    score: 0,
+    joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  }, { merge: true })
+  }), { merge: true })
 
-  await setDoc(doc(db, COLLECTIONS.debates, 'debate_SAMPLE'), {
-    debateId: 'debate_SAMPLE',
-    roomId,
-    prompt: 'Which AI solution is most realistic for the African context?',
-    status: 'draft',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  }, { merge: true })
+  await setDoc(doc(db, COLLECTIONS.teams, 'team_SAMPLE'), cleanFirestoreData({ teamId: 'team_SAMPLE', roomId, teamName: 'Sample Team', teamScore: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true })
+  await setDoc(doc(db, COLLECTIONS.teamSessions, 'teamSession_SAMPLE'), cleanFirestoreData({ teamSessionId: 'teamSession_SAMPLE', roomId, teamId: 'team_SAMPLE', problemCardId: '', selectedAiCardIds: [], sharedExplanation: '', totalScore: 0, feedback: '', status: 'draft', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true })
+  await setDoc(doc(db, COLLECTIONS.debates, 'debate_SAMPLE'), cleanFirestoreData({ debateId: 'debate_SAMPLE', roomId, prompt: 'Should AI be used to support local SDG problem solving?', status: 'open', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true })
+  await setDoc(doc(db, COLLECTIONS.debateVotes, 'debateVote_SAMPLE'), cleanFirestoreData({ voteId: 'debateVote_SAMPLE', debateId: 'debate_SAMPLE', roomId, voterUserId: userId, targetUserId: userId, voteCategory: 'strong_argument', createdAt: serverTimestamp() }), { merge: true })
+  await setDoc(doc(db, COLLECTIONS.tournaments, 'tournament_SAMPLE'), cleanFirestoreData({ tournamentId: 'tournament_SAMPLE', title: 'Sample Tournament', status: 'planning', roundCount: 1, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true })
+  await setDoc(doc(db, COLLECTIONS.tournamentPlayers, 'tournamentPlayer_SAMPLE'), cleanFirestoreData({ tournamentPlayerId: 'tournamentPlayer_SAMPLE', tournamentId: 'tournament_SAMPLE', userId, displayName: 'Sample Player', totalScore: 0, averageScore: 0, completedRounds: 0, rank: 1, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { merge: true })
 
-  await setDoc(doc(db, COLLECTIONS.tournaments, 'tournament_SAMPLE'), {
-    tournamentId: 'tournament_SAMPLE',
-    title: 'Sample GLA AI Tournament',
-    status: 'draft',
-    roundCount: 3,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  }, { merge: true })
-
-  return 4
+  return 8
 }

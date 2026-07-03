@@ -15,6 +15,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
   const [rewards, setRewards] = useState([])
   const [claims, setClaims] = useState([])
   const [launchSettings, setLaunchSettings] = useState(null)
+  const [publicLaunchEvents, setPublicLaunchEvents] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [rewardFilter, setRewardFilter] = useState('all')
   const [statusMessage, setStatusMessage] = useState('')
@@ -29,6 +30,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
       setRewards(data.rewards)
       setClaims(data.claims)
       setLaunchSettings(data.launchSettings)
+      setPublicLaunchEvents(data.publicLaunchEvents || [])
     } catch (err) {
       setError(err.message || 'Could not load rewards and launch data from Firebase.')
     } finally {
@@ -115,6 +117,11 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
           <p style={styles.smallCardText}>rewardClaims</p>
         </div>
         <div style={styles.smallCard}>
+          <p style={styles.eyebrow}>Launch Events</p>
+          <h3 style={styles.smallCardTitle}>{publicLaunchEvents.length}</h3>
+          <p style={styles.smallCardText}>publicLaunchEvents</p>
+        </div>
+        <div style={styles.smallCard}>
           <p style={styles.eyebrow}>Certificate</p>
           <h3 style={styles.smallCardTitle}>{certificateUnlocked ? 'Unlocked' : 'Pending'}</h3>
           <p style={styles.smallCardText}>Used by some rewards.</p>
@@ -134,6 +141,32 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
         <div style={{ ...styles.centerButtonRow, marginTop: 14 }}>
           <button type="button" onClick={handleCreateStarterData} style={secondaryButtonStyle}>Create starter reward data</button>
         </div>
+      </div>
+
+      <div style={{ ...styles.smallCard, marginTop: 18 }}>
+        <div style={styles.rowBetween}>
+          <div>
+            <p style={styles.eyebrow}>Public launch events</p>
+            <h3 style={styles.smallCardTitle}>Upcoming launch activities</h3>
+          </div>
+          <Pill>{publicLaunchEvents.length} events</Pill>
+        </div>
+        {publicLaunchEvents.length === 0 ? (
+          <p style={{ ...styles.smallCardText, marginTop: 12 }}>No public launch events found yet.</p>
+        ) : (
+          <div style={eventGridStyle}>
+            {publicLaunchEvents.map((event) => (
+              <article key={event.eventId} style={eventCardStyle}>
+                <div style={styles.rowBetween}>
+                  <h3 style={styles.smallCardTitle}>{event.title}</h3>
+                  <Pill>{event.eventStatus}</Pill>
+                </div>
+                <p style={styles.smallCardText}>{event.description || 'Launch event details will be updated by admin.'}</p>
+                <p style={styles.smallCardText}>{event.eventDate || 'Date pending'}</p>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
@@ -205,6 +238,8 @@ function MessageCard({ message, tone }) {
 const filterGridStyle = { marginTop: 16, display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 220px', gap: 12 }
 const inputStyle = { width: '100%', padding: '13px 15px', borderRadius: 16, border: '1px solid rgba(139, 92, 40, 0.24)', background: 'rgba(255, 255, 255, 0.76)', color: '#3b2817', outline: 'none' }
 const rewardGridStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }
+const eventGridStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }
+const eventCardStyle = { padding: 16, borderRadius: 22, background: 'rgba(244,210,138,0.18)', border: '1px solid rgba(139, 92, 40, 0.16)', display: 'grid', gap: 8 }
 const rewardCardStyle = { padding: 18, borderRadius: 24, background: 'rgba(255,255,255,0.66)', border: '1px solid rgba(139, 92, 40, 0.16)', boxShadow: '0 16px 36px rgba(80, 52, 20, 0.08)', display: 'grid', gap: 12 }
 const primaryButtonStyle = { border: 0, borderRadius: 999, padding: '12px 16px', cursor: 'pointer', background: 'linear-gradient(135deg, #9a6a22, #5c3512)', color: '#fff8eb', fontWeight: 850 }
 const secondaryButtonStyle = { border: '1px solid rgba(139, 92, 40, 0.22)', borderRadius: 999, padding: '12px 16px', cursor: 'pointer', background: 'rgba(255,255,255,0.72)', color: '#5c3512', fontWeight: 850 }

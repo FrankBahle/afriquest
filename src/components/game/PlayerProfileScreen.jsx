@@ -55,16 +55,25 @@ function PlayerProfileScreen({
   const [formData, setFormData] = useState({
     firstName,
     lastName,
-    phone
+    email,
+    phone,
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   })
 
   useEffect(() => {
-    setFormData({
+    setFormData((previous) => ({
+      ...previous,
       firstName,
       lastName,
-      phone
-    })
-  }, [firstName, lastName, phone])
+      email,
+      phone,
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    }))
+  }, [firstName, lastName, email, phone])
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -80,10 +89,17 @@ function PlayerProfileScreen({
 
     if (!onSaveProfile) return
 
+    if (formData.newPassword && formData.newPassword !== formData.confirmPassword) {
+      return
+    }
+
     onSaveProfile({
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
+      email: formData.email.trim(),
       phone: formData.phone.trim(),
+      currentPassword: formData.currentPassword,
+      newPassword: formData.newPassword,
       displayName: `${formData.firstName} ${formData.lastName}`.trim()
     })
   }
@@ -103,9 +119,8 @@ function PlayerProfileScreen({
         selected stack, progress, GLA coin, certificate status and activity.
       </SectionHeader>
 
-      <div style={styles.metricGrid}>
+      <div style={profileSummaryGridStyle}>
         <MetricCard title="Name" value={displayValue(fullName, 'Player')} />
-        <MetricCard title="Email" value={displayValue(email, 'No email')} />
         <MetricCard title="Selected Stack" value={selectedProblemStack.length} />
         <MetricCard title="Attempts" value={attempts.length} />
         <MetricCard title="Completed" value={completedProblems} />
@@ -113,6 +128,10 @@ function PlayerProfileScreen({
         <MetricCard title="GLA Coin" value={glaCoinBalance} />
         <MetricCard title="Total Spent" value={totalGlaCoinSpent} />
         <MetricCard title="Certificate" value={certificateUnlocked ? 'Unlocked' : 'Locked'} />
+        <div style={emailSummaryCardStyle}>
+          <p style={styles.eyebrow}>Email Address</p>
+          <h3 style={emailSummaryValueStyle}>{displayValue(email, 'No email')}</h3>
+        </div>
       </div>
 
       <form
@@ -149,6 +168,18 @@ function PlayerProfileScreen({
         </div>
 
         <div style={{ display: 'grid', gap: '10px' }}>
+          <label style={labelStyle}>Email Address</label>
+          <input
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="Enter email address"
+          />
+        </div>
+
+        <div style={{ display: 'grid', gap: '10px' }}>
           <label style={labelStyle}>Phone</label>
           <input
             name="phone"
@@ -158,6 +189,50 @@ function PlayerProfileScreen({
             placeholder="Enter phone number"
           />
         </div>
+
+        <div style={passwordGridStyle}>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <label style={labelStyle}>Current Password</label>
+            <input
+              name="currentPassword"
+              type="password"
+              value={formData.currentPassword}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="Needed for email/password changes"
+            />
+          </div>
+
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <label style={labelStyle}>New Password</label>
+            <input
+              name="newPassword"
+              type="password"
+              value={formData.newPassword}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="Leave empty to keep current password"
+            />
+          </div>
+
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <label style={labelStyle}>Confirm New Password</label>
+            <input
+              name="confirmPassword"
+              type="password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="Repeat new password"
+            />
+          </div>
+        </div>
+
+        {formData.newPassword && formData.newPassword !== formData.confirmPassword && (
+          <p style={{ margin: 0, fontWeight: 800, color: '#991b1b' }}>
+            New password and confirm password must match.
+          </p>
+        )}
 
         <div>
           <ActionButton type="submit" disabled={profileSaving}>
@@ -208,6 +283,33 @@ function PlayerProfileScreen({
       </div>
     </div>
   )
+}
+
+const profileSummaryGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+  gap: '14px'
+}
+
+const emailSummaryCardStyle = {
+  ...styles.smallCard,
+  gridColumn: '1 / -1',
+  minHeight: 96
+}
+
+const emailSummaryValueStyle = {
+  margin: '8px 0 0',
+  color: '#4b2b10',
+  fontSize: 'clamp(1.05rem, 2.4vw, 1.55rem)',
+  lineHeight: 1.25,
+  letterSpacing: '-0.03em',
+  overflowWrap: 'anywhere'
+}
+
+const passwordGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+  gap: '12px'
 }
 
 const labelStyle = {
