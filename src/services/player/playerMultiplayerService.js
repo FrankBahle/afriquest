@@ -1,4 +1,14 @@
-import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore'
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where
+} from 'firebase/firestore'
 import { COLLECTIONS, cleanFirestoreData, db, isSchemaDocument } from '../firebaseService'
 
 function cleanText(value) {
@@ -213,6 +223,156 @@ export async function joinMultiplayerRoom({ userId, displayName, roomCode }) {
   })
 
   return roomId
+}
+
+export async function getChallengeRoomDetails(roomId) {
+  if (!roomId) throw new Error('Room ID is required.')
+
+  const roomSnapshot = await getDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId))
+
+  if (!roomSnapshot.exists()) {
+    throw new Error('Room was not found.')
+  }
+
+  const room = {
+    firestoreId: roomSnapshot.id,
+    ...roomSnapshot.data()
+  }
+
+  const playersSnapshot = await getDocs(collection(db, COLLECTIONS.roomPlayers))
+  const roomPlayers = playersSnapshot.docs
+    .map((playerDoc) => ({
+      firestoreId: playerDoc.id,
+      ...playerDoc.data()
+    }))
+    .filter((player) => player.roomId === roomId && !isSchemaDocument(player))
+
+  const attemptsSnapshot = await getDocs(collection(db, COLLECTIONS.attempts))
+  const roomAttempts = attemptsSnapshot.docs
+    .map((attemptDoc) => ({
+      firestoreId: attemptDoc.id,
+      ...attemptDoc.data()
+    }))
+    .filter((attempt) => attempt.roomId === roomId && !isSchemaDocument(attempt))
+
+  const scoresSnapshot = await getDocs(collection(db, COLLECTIONS.scores))
+  const roomScores = scoresSnapshot.docs
+    .map((scoreDoc) => ({
+      firestoreId: scoreDoc.id,
+      ...scoreDoc.data()
+    }))
+    .filter((score) => score.roomId === roomId && !isSchemaDocument(score))
+
+  return {
+    room: normaliseRoom(room, roomPlayers),
+    roomPlayers,
+    roomAttempts,
+    roomScores
+  }
+}
+
+export async function startChallengeRoom({ roomId, problemCardId }) {
+  if (!roomId) throw new Error('Room ID is required to start the challenge.')
+  if (!problemCardId) throw new Error('Problem card ID is required to start the challenge.')
+
+  const roomRef = doc(db, COLLECTIONS.multiplayerRooms, roomId)
+  const roomSnapshot = await getDoc(roomRef)
+
+  if (!roomSnapshot.exists()) {
+    throw new Error('Room was not found.')
+  }
+
+  await updateDoc(roomRef, {
+    mode: 'challenge',
+    status: 'active',
+    currentProblemId: problemCardId,
+    startedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  })
+
+  return roomId
+}
+
+export async function submitChallengeAttempt({
+  roomId,
+  roomCode,
+  userId,
+  displayName,
+  problemCardId,
+  problemTitle,
+  selectedAiCardIds,
+  selectedAiCardTitles,
+  explanation,
+  totalScore = 0,
+  feedback = '',
+  status = 'submitted'
+}) {
+  if (!roomId) throw new Error('Room ID is required.')
+  if (!userId) throw new Error('User ID is required.')
+  if (!problemCardId) throw new Error('Problem card ID is required.')
+  if (!explanation) throw new Error('Explanation is required.')
+
+  const attemptId = `${roomId}_${userId}_${Date.now()}`
+
+  await setDoc(doc(db, COLLECTIONS.attempts, attemptId), cleanFirestoreData({
+    attemptId,
+    roomId,
+    roomCode,
+    userId,
+    displayName: cleanText(displayName) || 'Player',
+    isMultiplayer: true,
+    multiplayerMode: 'challenge',
+    problemCardId,
+    problemTitle: cleanText(problemTitle),
+    selectedAiCardIds: selectedAiCardIds || [],
+    selectedAiCardTitles: selectedAiCardTitles || [],
+    explanation,
+    totalScore: Number(totalScore || 0),
+    feedback,
+    status,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }), { merge: true })
+
+  await setDoc(doc(db, COLLECTIONS.roomPlayers, `${roomId}_${userId}`), cleanFirestoreData({
+    roomPlayerId: `${roomId}_${userId}`,
+    roomId,
+    roomCode,
+    userId,
+    displayName: cleanText(displayName) || 'Player',
+    role: 'player',
+    status: 'submitted',
+    score: Number(totalScore || 0),
+    updatedAt: serverTimestamp()
+  }), { merge: true })
+
+  return attemptId
+}
+
+export async function getChallengeResults(roomId) {
+  if (!roomId) throw new Error('Room ID is required.')
+
+  const attemptsSnapshot = await getDocs(collection(db, COLLECTIONS.attempts))
+
+  const attempts = attemptsSnapshot.docs
+    .map((attemptDoc) => ({
+      firestoreId: attemptDoc.id,
+      ...attemptDoc.data()
+    }))
+    .filter((attempt) => {
+      return (
+        attempt.roomId === roomId &&
+        attempt.isMultiplayer === true &&
+        attempt.multiplayerMode === 'challenge' &&
+        !isSchemaDocument(attempt)
+      )
+    })
+    .sort((a, b) => Number(b.totalScore || 0) - Number(a.totalScore || 0))
+
+  return attempts.map((attempt, index) => ({
+    ...attempt,
+    rank: index + 1
+  }))
 }
 
 export async function seedMultiplayerTableSamples(userId = 'sample_user') {
