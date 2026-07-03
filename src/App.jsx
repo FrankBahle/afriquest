@@ -9,59 +9,55 @@ import logo from './assets/images/logo.png'
 import city1 from './assets/images/city1.png'
 import city2 from './assets/images/city2.png'
 import mountain from './assets/images/mountain.png'
+import farm1 from './assets/images/farm1.png'
+import farm2 from './assets/images/farm2.png'
 import LoadingScreen from './components/LoadingScreen'
-import v1 from './assets/Video/v1.mp4'
-import v2 from './assets/Video/v2.mp4'
-import v3 from './assets/Video/v3.mp4'
 
 const backgroundMedia = [
   {
-    type: 'image',
-    src: city1
-  },
-  {
-    type: 'video',
-    src: v1
-  },
-  {
-    type: 'image',
-    src: city2
-  },
-  {
-    type: 'video',
-    src: v2
-  },
-  {
-    type: 'image',
     src: mountain
   },
   {
-    type: 'video',
-    src: v3
+    src: farm1
+  },
+  {
+    src: mountain
+  },
+  {
+    src: city1
+  },
+  {
+    src: city2
+  },
+  {
+    src: farm1
+  },
+  {
+    src: farm2
   }
 ]
 
 
 
 function App() {
+  const [appLoading, setAppLoading] = useState(true)
   const isAdminRoute = window.location.pathname.toLowerCase().startsWith('/admin')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAppLoading(false)
+    }, 1600)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (appLoading) {
+    return <LoadingScreen />
+  }
 
   if (isAdminRoute) {
     return <AdminApp />
   }
-const [appLoading, setAppLoading] = useState(true)
-
-useEffect(() => {
-  const timer = setTimeout(() => {
-    setAppLoading(false)
-  }, 1600)
-
-  return () => clearTimeout(timer)
-}, [])
-
-if (appLoading) {
-  return <LoadingScreen />
-}
 
   return <PlayerApp />
 }
@@ -153,28 +149,12 @@ function PlayerApp() {
         <>
           <section className="heroArea" id="about">
             <div className="heroMediaCard">
-              {currentMedia.type === 'video' ? (
-                <video
-                  key={currentMedia.src}
-                  className={`heroMedia ${
-                    isFading ? 'mediaFadeOut' : 'mediaFadeIn'
-                  }`}
-                  src={currentMedia.src}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                />
-              ) : (
-                <img
-                  key={currentMedia.src}
-                  className={`heroMedia ${
-                    isFading ? 'mediaFadeOut' : 'mediaFadeIn'
-                  }`}
-                  src={currentMedia.src}
-                  alt="African innovation background"
-                />
-              )}
+              <img
+  key={currentMedia.src}
+  className={`heroMedia ${isFading ? 'mediaFadeOut' : 'mediaFadeIn'}`}
+  src={currentMedia.src}
+  alt="African innovation background"
+/>
 
               <div className="heroOverlay"></div>
 
