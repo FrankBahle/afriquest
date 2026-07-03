@@ -9,7 +9,7 @@ import logo from './assets/images/logo.png'
 import city1 from './assets/images/city1.png'
 import city2 from './assets/images/city2.png'
 import mountain from './assets/images/mountain.png'
-
+import LoadingScreen from './components/LoadingScreen'
 import v1 from './assets/Video/v1.mp4'
 import v2 from './assets/Video/v2.mp4'
 import v3 from './assets/Video/v3.mp4'
@@ -41,12 +41,27 @@ const backgroundMedia = [
   }
 ]
 
+
+
 function App() {
   const isAdminRoute = window.location.pathname.toLowerCase().startsWith('/admin')
 
   if (isAdminRoute) {
     return <AdminApp />
   }
+const [appLoading, setAppLoading] = useState(true)
+
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setAppLoading(false)
+  }, 1600)
+
+  return () => clearTimeout(timer)
+}, [])
+
+if (appLoading) {
+  return <LoadingScreen />
+}
 
   return <PlayerApp />
 }
