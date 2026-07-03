@@ -10,6 +10,43 @@ const RUBRIC_LIMITS = {
 
 const RUBRIC_KEYS = Object.keys(RUBRIC_LIMITS)
 
+const RUBRIC_FEEDBACK_DEFAULTS = {
+  ai_card_relevance: 'The selected AI cards should directly match the problem and clearly support the solution.',
+  combination_strength: 'Explain how the selected AI cards work together instead of acting as separate ideas.',
+  practical_feasibility: 'Make the solution more realistic by mentioning tools, people, cost, access, or implementation steps.',
+  african_context_and_feasibility: 'Strengthen the answer by showing awareness of African realities such as language, connectivity, infrastructure, cost, and local communities.',
+  sdg_alignment: 'Connect the solution more clearly to the SDG goals linked to the problem card.',
+  creativity_and_innovation: 'Add a more original, useful, or locally inspiring idea.',
+  ethical_and_responsible_use: 'Mention privacy, fairness, inclusion, safety, and human oversight where needed.'
+}
+
+function normaliseAreaFeedback(parsed = {}) {
+  const raw =
+    parsed?.feedback_by_area ||
+    parsed?.area_feedback ||
+    parsed?.sub_score_feedback ||
+    parsed?.subScoreFeedback ||
+    parsed?.feedback?.by_area ||
+    parsed?.feedback?.sub_scores ||
+    {}
+
+  const result = {}
+
+  RUBRIC_KEYS.forEach((key) => {
+    const value = raw[key] || raw[key.replace(/_/g, ' ')] || raw[key.replace(/_/g, '')]
+
+    if (typeof value === 'string' && value.trim()) {
+      result[key] = value.trim()
+    } else if (value && typeof value === 'object') {
+      result[key] = String(value.feedback || value.reason || value.comment || RUBRIC_FEEDBACK_DEFAULTS[key]).trim()
+    } else {
+      result[key] = RUBRIC_FEEDBACK_DEFAULTS[key]
+    }
+  })
+
+  return result
+}
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -296,7 +333,8 @@ function getFeedback(parsed, userExplanation) {
 
   return {
     overall,
-    improvement
+    improvement,
+    by_area: normaliseAreaFeedback(parsed)
   }
 }
 
@@ -336,11 +374,15 @@ function normaliseEvaluation(parsed, userExplanation) {
     subScores = distributeTotalIntoSubScores(totalScore)
   }
 
+  const feedback = getFeedback(parsed, userExplanation)
+
   return {
     total_score: totalScore,
     GLA_coin_earned: totalScore,
     sub_scores: subScores,
-    feedback: getFeedback(parsed, userExplanation)
+    feedback,
+    feedback_by_area: feedback.by_area,
+    certification_trackable: totalScore >= 50
   }
 }
 
@@ -357,7 +399,7 @@ async function callDeepSeek({ apiKey, model, prompt }) {
         {
           role: 'system',
           content:
-            'You are the GRIT Lab Africa AI card game evaluator. Return JSON only. Do not return markdown. The response must be valid JSON.'
+            'You are the GRIT Lab Africa AI card game evaluator. Score strictly using the seven-area rubric. Return JSON only. Do not return markdown. The response must be valid JSON.'
         },
         {
           role: 'user',
@@ -480,6 +522,8 @@ IMPORTANT SCORING RULES:
 - The score becomes the player's GLA coin earned.
 - If the player says "I don't know", "not sure", "idk", or gives a very weak answer, give a low score between 1 and 15, but still give helpful feedback.
 - Do not say you cannot evaluate the answer.
+- Judge each rubric category separately and precisely. Do not copy the same value into every category unless the answer truly deserves that.
+- Award marks only for what the player actually explains.
 - Judge realism, practicality, African context, SDG alignment, creativity, and ethics.
 - If the idea is unsafe, harmful, discriminatory, privacy-invasive, or dangerous, give a very low score and explain the safety problem.
 - For health, mental health, GBV, crime, substance abuse, or emergency topics, reward privacy, human oversight, safe referrals, and appropriate support services.
@@ -528,7 +572,17 @@ Return exactly this JSON shape:
   "feedback": {
     "overall": "Short helpful feedback explaining why this score was given.",
     "improvement": "One clear way the player can improve the solution."
-  }
+  },
+  "feedback_by_area": {
+    "ai_card_relevance": "Precise reason for this sub-score.",
+    "combination_strength": "Precise reason for this sub-score.",
+    "practical_feasibility": "Precise reason for this sub-score.",
+    "african_context_and_feasibility": "Precise reason for this sub-score.",
+    "sdg_alignment": "Precise reason for this sub-score.",
+    "creativity_and_innovation": "Precise reason for this sub-score.",
+    "ethical_and_responsible_use": "Precise reason for this sub-score."
+  },
+  "certification_trackable": true
 }
 `
 

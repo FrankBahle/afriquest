@@ -84,6 +84,24 @@ export async function getPlayerDashboardScores(userId) {
   return sortNewestFirst(scores)
 }
 
+export async function getPlayerDashboardSubScores(userId) {
+  const subScores = await getPlayerCollectionRows(
+    PLAYER_COLLECTIONS.subScores,
+    userId
+  )
+
+  return sortNewestFirst(subScores)
+}
+
+export async function getPlayerDashboardFeedback(userId) {
+  const feedback = await getPlayerCollectionRows(
+    PLAYER_COLLECTIONS.feedback,
+    userId
+  )
+
+  return sortNewestFirst(feedback)
+}
+
 export async function getPlayerDashboardCoinTransactions(userId) {
   const transactions = await getPlayerCollectionRows(
     PLAYER_COLLECTIONS.glaCoinTransactions,
@@ -137,11 +155,50 @@ function buildScoreLookup(scores) {
   return scoreLookup
 }
 
-function buildAttemptRows(attempts, scores) {
+function buildSubScoreLookup(subScores) {
+  const lookup = {}
+
+  subScores.forEach((subScore) => {
+    const attemptId = subScore.attemptId
+    const key = subScore.rubricKey
+
+    if (!attemptId || !key) return
+
+    if (!lookup[attemptId]) {
+      lookup[attemptId] = { values: {}, feedback: {} }
+    }
+
+    lookup[attemptId].values[key] = toSafeNumber(subScore.score)
+
+    if (subScore.feedback) {
+      lookup[attemptId].feedback[key] = subScore.feedback
+    }
+  })
+
+  return lookup
+}
+
+function buildFeedbackLookup(feedbackRows) {
+  const lookup = {}
+
+  feedbackRows.forEach((feedbackRow) => {
+    if (!feedbackRow.attemptId) return
+    lookup[feedbackRow.attemptId] = feedbackRow
+  })
+
+  return lookup
+}
+
+function buildAttemptRows(attempts, scores, subScores = [], feedbackRows = []) {
   const scoreLookup = buildScoreLookup(scores)
+  const subScoreLookup = buildSubScoreLookup(subScores)
+  const feedbackLookup = buildFeedbackLookup(feedbackRows)
 
   return attempts.map((attempt) => {
-    const matchingScore = scoreLookup[attempt.attemptId || attempt.id] || {}
+    const attemptId = attempt.attemptId || attempt.id
+    const matchingScore = scoreLookup[attemptId] || {}
+    const matchingSubScores = subScoreLookup[attemptId] || { values: {}, feedback: {} }
+    const matchingFeedback = feedbackLookup[attemptId] || {}
 
     return {
       ...attempt,
@@ -151,7 +208,18 @@ function buildAttemptRows(attempts, scores) {
       glaCoinEarned: toSafeNumber(
         matchingScore.glaCoinEarned ?? attempt.glaCoinEarned
       ),
-      scoreId: matchingScore.scoreId || matchingScore.id || ''
+      scoreId: matchingScore.scoreId || matchingScore.id || '',
+      subScores: Object.keys(matchingSubScores.values).length > 0
+        ? matchingSubScores.values
+        : attempt.subScores || attempt.sub_scores || {},
+      areaFeedback: Object.keys(matchingSubScores.feedback).length > 0
+        ? matchingSubScores.feedback
+        : attempt.areaFeedback || {},
+      feedback: matchingFeedback.overallFeedback || attempt.feedback || attempt.overallFeedback || '',
+      overallFeedback: matchingFeedback.overallFeedback || attempt.overallFeedback || attempt.feedback || '',
+      improvementSuggestion: matchingFeedback.improvementSuggestion || attempt.improvementSuggestion || attempt.improvement || '',
+      improvement: matchingFeedback.improvementSuggestion || attempt.improvement || attempt.improvementSuggestion || '',
+      certificationTrackable: matchingFeedback.certificationTrackable ?? attempt.certificationTrackable ?? true
     }
   })
 }
@@ -287,13 +355,15 @@ export function buildPlayerDashboardSummary({
   profile,
   attempts,
   scores,
+  subScores = [],
+  feedback = [],
   coinTransactions,
   certificates,
   playerAchievements,
   availableAchievements,
   selectedProblemStack
 }) {
-  const attemptRows = buildAttemptRows(attempts, scores)
+  const attemptRows = buildAttemptRows(attempts, scores, subScores, feedback)
   const problemStats = buildProblemStats(attemptRows)
   const completedProblemRows = buildCompletedProblemRows(problemStats)
   const bestScoringProblems = buildBestScoringProblems(completedProblemRows)
@@ -317,6 +387,8 @@ export function buildPlayerDashboardSummary({
     selectedProblemStack,
     attempts: attemptRows,
     scores,
+    subScores,
+    feedback,
     coinTransactions,
     certificates,
     latestCertificate,
@@ -332,15 +404,18 @@ export function buildPlayerDashboardSummary({
       bestScoringProblems.length > 0 ? bestScoringProblems[0].bestScore : 0,
     bestScoringProblems,
     latestAttempt,
-    glaCoinBalance: toSafeNumber(profile?.glaCoinBalance),
-    totalGlaCoinEarned: toSafeNumber(
-      profile?.totalGlaCoinEarned,
-      coinSummary.totalGlaCoinEarned
-    ),
-    totalGlaCoinSpent: toSafeNumber(
-      profile?.totalGlaCoinSpent,
-      coinSummary.totalGlaCoinSpent
-    ),
+    glaCoinBalance:
+      coinTransactions.length > 0
+        ? coinSummary.totalGlaCoinEarned - coinSummary.totalGlaCoinSpent
+        : toSafeNumber(profile?.glaCoinBalance),
+    totalGlaCoinEarned:
+      coinTransactions.length > 0
+        ? coinSummary.totalGlaCoinEarned
+        : toSafeNumber(profile?.totalGlaCoinEarned),
+    totalGlaCoinSpent:
+      coinTransactions.length > 0
+        ? coinSummary.totalGlaCoinSpent
+        : toSafeNumber(profile?.totalGlaCoinSpent),
     glaCoinSpentOnHints: coinSummary.glaCoinSpentOnHints,
     totalHintsUsed: toSafeNumber(profile?.totalHintsUsed),
     certificateUnlocked,
@@ -357,6 +432,8 @@ export async function getPlayerDashboardData(userId) {
     profile,
     attempts,
     scores,
+    subScores,
+    feedback,
     coinTransactions,
     certificates,
     playerAchievements,
@@ -366,6 +443,8 @@ export async function getPlayerDashboardData(userId) {
     getPlayerProfile(userId),
     getPlayerDashboardAttempts(userId),
     getPlayerDashboardScores(userId),
+    getPlayerDashboardSubScores(userId),
+    getPlayerDashboardFeedback(userId),
     getPlayerDashboardCoinTransactions(userId),
     getPlayerDashboardCertificates(userId),
     getPlayerDashboardAchievements(userId),
@@ -379,6 +458,8 @@ export async function getPlayerDashboardData(userId) {
     profile,
     attempts,
     scores,
+    subScores,
+    feedback,
     coinTransactions,
     certificates,
     playerAchievements,

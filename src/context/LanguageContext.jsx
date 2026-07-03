@@ -121,57 +121,113 @@ function buildTranslationMap(languageCode, rows) {
   return { map, phraseMap }
 }
 
+const domOriginalTextMap = new WeakMap()
+const translatedAttrPrefix = 'data-gla-original'
+
 function useDomTranslator(languageCode, phraseMap, enabled) {
   useEffect(() => {
-    if (!enabled || languageCode === 'en') return
-
-    const originalTextMap = new WeakMap()
-    const translatedAttr = 'data-gla-original-text'
-
-    function translateTextNode(node) {
-      if (!node.nodeValue || !node.nodeValue.trim()) return
-      const original = originalTextMap.get(node) || node.nodeValue.trim()
-      originalTextMap.set(node, original)
-      const translated = phraseMap[original]
-      if (!translated) return
-      node.nodeValue = node.nodeValue.replace(original, translated)
+    function shouldSkipElement(node) {
+      const tag = node?.tagName?.toLowerCase()
+      return ['script', 'style', 'textarea', 'input', 'select', 'option'].includes(tag)
     }
 
-    function walk(node) {
-      if (!node) return
-      if (node.nodeType === Node.TEXT_NODE) {
-        translateTextNode(node)
-        return
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return
-      const tag = node.tagName?.toLowerCase()
-      if (['script', 'style', 'textarea', 'input', 'select', 'option'].includes(tag)) return
-      Array.from(node.childNodes || []).forEach(walk)
+    function restoreTextNodes(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      const nodes = []
+      while (walker.nextNode()) nodes.push(walker.currentNode)
+      nodes.forEach((node) => {
+        const original = domOriginalTextMap.get(node)
+        if (original !== undefined) node.nodeValue = original
+      })
+    }
+
+    function translateTextNodes(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT
+          let parent = node.parentElement
+          while (parent) {
+            if (shouldSkipElement(parent)) return NodeFilter.FILTER_REJECT
+            parent = parent.parentElement
+          }
+          return NodeFilter.FILTER_ACCEPT
+        }
+      })
+
+      const nodes = []
+      while (walker.nextNode()) nodes.push(walker.currentNode)
+
+      nodes.forEach((node) => {
+        const original = domOriginalTextMap.get(node) || node.nodeValue
+        domOriginalTextMap.set(node, original)
+        const cleanOriginal = original.trim()
+        const translated = phraseMap[cleanOriginal]
+        if (translated) node.nodeValue = original.replace(cleanOriginal, translated)
+      })
     }
 
     function translateAttributes(root) {
       const elements = root.querySelectorAll?.('[placeholder], [title], [aria-label]') || []
       elements.forEach((element) => {
+        if (shouldSkipElement(element)) return
         ;['placeholder', 'title', 'aria-label'].forEach((attribute) => {
           const value = element.getAttribute(attribute)
           if (!value) return
-          const originalKey = `${translatedAttr}-${attribute}`
+          const originalKey = `${translatedAttrPrefix}-${attribute}`
           const original = element.getAttribute(originalKey) || value
           element.setAttribute(originalKey, original)
-          if (phraseMap[original]) element.setAttribute(attribute, phraseMap[original])
+          element.setAttribute(attribute, phraseMap[original] || original)
         })
       })
     }
 
+    function restoreAttributes(root) {
+      const elements = root.querySelectorAll?.('[data-gla-original-placeholder], [data-gla-original-title], [data-gla-original-aria-label]') || []
+      elements.forEach((element) => {
+        ;['placeholder', 'title', 'aria-label'].forEach((attribute) => {
+          const original = element.getAttribute(`${translatedAttrPrefix}-${attribute}`)
+          if (original) element.setAttribute(attribute, original)
+        })
+      })
+    }
+
+    let isTranslating = false
+    let translateTimer = null
+
     const translatePage = () => {
-      walk(document.body)
-      translateAttributes(document.body)
+      if (!document.body || isTranslating) return
+
+      isTranslating = true
+      try {
+        restoreTextNodes(document.body)
+        restoreAttributes(document.body)
+        if (enabled && languageCode !== 'en') {
+          translateTextNodes(document.body)
+          translateAttributes(document.body)
+        }
+      } finally {
+        isTranslating = false
+      }
+    }
+
+    const scheduleTranslate = () => {
+      if (translateTimer) window.clearTimeout(translateTimer)
+      translateTimer = window.setTimeout(translatePage, 80)
     }
 
     translatePage()
-    const observer = new MutationObserver(() => translatePage())
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
+    const observer = new MutationObserver(scheduleTranslate)
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true })
+    }
+    return () => {
+      observer.disconnect()
+      if (translateTimer) window.clearTimeout(translateTimer)
+      if (document.body) {
+        restoreTextNodes(document.body)
+        restoreAttributes(document.body)
+      }
+    }
   }, [languageCode, phraseMap, enabled])
 }
 

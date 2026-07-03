@@ -98,7 +98,9 @@ function normaliseScoreResult(scoreResult = {}) {
       scoreResult.improvement ||
       scoreResult.feedback?.improvement ||
       'Add more practical detail to strengthen your solution.',
-    subScores: scoreResult.subScores || scoreResult.sub_scores || {}
+    subScores: scoreResult.subScores || scoreResult.sub_scores || {},
+    areaFeedback: scoreResult.areaFeedback || scoreResult.feedback_by_area || scoreResult.area_feedback || scoreResult.feedback?.by_area || {},
+    certificationTrackable: scoreResult.certificationTrackable ?? scoreResult.certification_trackable ?? totalScore >= 50
   }
 }
 
@@ -340,6 +342,13 @@ export async function saveAttemptWithScoring({
       explanation,
       wordCount: explanation.trim().split(/\s+/).filter(Boolean).length,
       attemptNumber,
+      totalScore: normalisedResult.totalScore,
+      glaCoinEarned: normalisedResult.glaCoinEarned,
+      subScores: normalisedResult.subScores,
+      areaFeedback: normalisedResult.areaFeedback,
+      overallFeedback: normalisedResult.overallFeedback,
+      improvementSuggestion: normalisedResult.improvementSuggestion,
+      certificationTrackable: normalisedResult.certificationTrackable,
       status: 'scored',
       isSchema: false,
       createdAt: now(),
@@ -408,6 +417,16 @@ export async function saveAttemptWithScoring({
           scoreId: scoreRef.id,
           rubricKey,
           score: toSafeNumber(score),
+          maxScore: {
+            ai_card_relevance: 20,
+            combination_strength: 15,
+            practical_feasibility: 15,
+            african_context_and_feasibility: 15,
+            sdg_alignment: 15,
+            creativity_and_innovation: 10,
+            ethical_and_responsible_use: 10
+          }[rubricKey] || 0,
+          feedback: normalisedResult.areaFeedback?.[rubricKey] || '',
           isSchema: false,
           createdAt: now()
         })
@@ -427,6 +446,8 @@ export async function saveAttemptWithScoring({
       problemCardId: String(problemCard.id),
       overallFeedback: normalisedResult.overallFeedback,
       improvementSuggestion: normalisedResult.improvementSuggestion,
+      areaFeedback: normalisedResult.areaFeedback,
+      certificationTrackable: normalisedResult.certificationTrackable,
       isSchema: false,
       createdAt: now()
     })
@@ -436,6 +457,16 @@ export async function saveAttemptWithScoring({
     feedbackId: feedbackRef.id
   })
 
+  const userRef = getUserRef(userId)
+  const userSnapBeforeReward = await getDoc(userRef)
+  const currentBalance = userSnapBeforeReward.exists()
+    ? toSafeNumber(userSnapBeforeReward.data().glaCoinBalance)
+    : 0
+  const currentTotalEarned = userSnapBeforeReward.exists()
+    ? toSafeNumber(userSnapBeforeReward.data().totalGlaCoinEarned)
+    : 0
+  const balanceAfter = currentBalance + normalisedResult.glaCoinEarned
+
   const transactionRef = await addDoc(
     playerCollection(PLAYER_COLLECTIONS.glaCoinTransactions),
     cleanData({
@@ -443,6 +474,8 @@ export async function saveAttemptWithScoring({
       userId,
       type: 'earned',
       amount: normalisedResult.glaCoinEarned,
+      balanceBefore: currentBalance,
+      balanceAfter,
       reason: 'problem_score',
       relatedAttemptId: attemptRef.id,
       relatedHintRequestId: '',
@@ -457,9 +490,9 @@ export async function saveAttemptWithScoring({
     transactionId: transactionRef.id
   })
 
-  await updateDoc(getUserRef(userId), {
-    glaCoinBalance: increment(normalisedResult.glaCoinEarned),
-    totalGlaCoinEarned: increment(normalisedResult.glaCoinEarned),
+  await updateDoc(userRef, {
+    glaCoinBalance: balanceAfter,
+    totalGlaCoinEarned: currentTotalEarned + normalisedResult.glaCoinEarned,
     updatedAt: now()
   })
 
@@ -493,11 +526,14 @@ export async function saveAttemptWithScoring({
     scoreId: scoreRef.id,
     feedbackId: feedbackRef.id,
     transactionId: transactionRef.id,
+    balanceAfter,
     totalScore: normalisedResult.totalScore,
     glaCoinEarned: normalisedResult.glaCoinEarned,
     overallFeedback: normalisedResult.overallFeedback,
     improvementSuggestion: normalisedResult.improvementSuggestion,
-    subScores: normalisedResult.subScores
+    subScores: normalisedResult.subScores,
+    areaFeedback: normalisedResult.areaFeedback,
+    certificationTrackable: normalisedResult.certificationTrackable
   }
 }
 
@@ -505,6 +541,7 @@ export async function requestPlayerHint({
   userId,
   sessionId,
   problemCardId,
+  problemTitle = '',
   attemptId = '',
   hintText
 }) {
@@ -535,6 +572,7 @@ export async function requestPlayerHint({
       userId,
       sessionId,
       problemCardId,
+      problemTitle,
       attemptId,
       hintText,
       cost: 20,
@@ -562,6 +600,7 @@ export async function requestPlayerHint({
       relatedHintRequestId: hintRef.id,
       sessionId,
       problemCardId,
+      problemTitle,
       balanceBefore: currentBalance,
       balanceAfter,
       isSchema: false,

@@ -31,7 +31,9 @@ import {
   getActiveAiCards,
   getActiveProblemCards,
   saveAttemptWithScoring,
-  startGameSession
+  startGameSession,
+  requestPlayerHint,
+  refreshPlayerProgressFromAttempts
 } from '../services/player/playerJourneyService'
 import { getPlayerDashboardData } from '../services/player/playerDashboardService'
 import {
@@ -81,7 +83,9 @@ function normaliseAiResult(result) {
     glaCoinEarned: toSafeNumber(result?.GLA_coin_earned || result?.glaCoinEarned || result?.gla_coin_earned || totalScore),
     overallFeedback: result?.feedback?.overall || result?.overallFeedback || (typeof result?.feedback === 'string' ? result.feedback : '') || 'DeepSeek has reviewed the idea. Use the feedback to improve your solution.',
     improvement: result?.feedback?.improvement || result?.improvement || 'Make the explanation more specific about how the solution will work in real life.',
-    subScores: result?.sub_scores || result?.subScores || {}
+    subScores: result?.sub_scores || result?.subScores || {},
+    areaFeedback: result?.feedback_by_area || result?.areaFeedback || result?.feedback?.by_area || {},
+    certificationTrackable: result?.certification_trackable ?? result?.certificationTrackable ?? totalScore >= 50
   }
 }
 
@@ -354,7 +358,7 @@ function handleDrop(event) {
 })
       const createdAt = new Date().toLocaleString()
       const attemptNumber = attempts.filter((attempt) => attempt.problemId === round.card.id).length + 1
-      const balanceAfter = glaCoinBalance + normalisedResult.glaCoinEarned
+      const balanceAfter = toSafeNumber(savedAttempt.balanceAfter, glaCoinBalance + savedAttempt.glaCoinEarned)
 const attemptRecord = {
   id: savedAttempt.attemptId,
   problemId: round.card.id,
@@ -366,6 +370,8 @@ const attemptRecord = {
   feedback: savedAttempt.overallFeedback,
   improvement: savedAttempt.improvementSuggestion,
   subScores: savedAttempt.subScores,
+  areaFeedback: savedAttempt.areaFeedback,
+  certificationTrackable: savedAttempt.certificationTrackable,
   attemptNumber,
   createdAt
 }      
@@ -383,6 +389,44 @@ const coinTransaction = {
       setGlaCoinBalance(balanceAfter)
       setAttempts((previousAttempts) => [...previousAttempts, attemptRecord])
       setCoinTransactions((previousTransactions) => [coinTransaction, ...previousTransactions])
+      setDashboardData((previousDashboard) => {
+        if (!previousDashboard) return previousDashboard
+
+        const updatedAttempts = [...(previousDashboard.attempts || []), attemptRecord]
+        const updatedTransactions = [coinTransaction, ...(previousDashboard.coinTransactions || [])]
+        const updatedProblemStats = { ...(previousDashboard.attemptStatsByProblem || {}) }
+        const problemKey = String(round.card.id)
+        const existingStats = updatedProblemStats[problemKey]
+
+        updatedProblemStats[problemKey] = existingStats
+          ? {
+              ...existingStats,
+              latest: attemptRecord,
+              best: toSafeNumber(attemptRecord.totalScore) > toSafeNumber(existingStats.best?.totalScore) ? attemptRecord : existingStats.best,
+              count: toSafeNumber(existingStats.count) + 1
+            }
+          : {
+              problemId: problemKey,
+              problemTitle: round.card.title,
+              first: attemptRecord,
+              latest: attemptRecord,
+              best: attemptRecord,
+              count: 1
+            }
+
+        return {
+          ...previousDashboard,
+          profile: { ...(previousDashboard.profile || {}), glaCoinBalance: balanceAfter },
+          attempts: updatedAttempts,
+          coinTransactions: updatedTransactions,
+          latestAttempt: attemptRecord,
+          attemptStatsByProblem: updatedProblemStats,
+          glaCoinBalance: balanceAfter,
+          totalGlaCoinEarned: toSafeNumber(previousDashboard.totalGlaCoinEarned) + savedAttempt.glaCoinEarned
+        }
+      })
+      await refreshPlayerProgressFromAttempts(currentUser.uid)
+      await loadPlayerDashboard()
       setScreen('score')
     } catch (err) {
       setAiError(err.message || 'DeepSeek could not score the explanation.')
@@ -391,18 +435,76 @@ const coinTransaction = {
     }
   }
 
-  function confirmHintPurchase() {
-    if (glaCoinBalance < 20) {
+  async function confirmHintPurchase() {
+    const currentBalance = firestoreGlaCoinBalance
+
+    if (currentBalance < 20) {
       setHintMessage('You need at least 20 GLA coin to request a hint.')
       setShowHintConfirm(false)
       return
     }
+
+    if (!currentUser?.uid) {
+      setHintMessage('You must be logged in to request a hint.')
+      setShowHintConfirm(false)
+      return
+    }
+
+    const hintText = generateBasicHint(round.card)
     const createdAt = new Date().toLocaleString()
-    const balanceAfter = glaCoinBalance - 20
-    setGlaCoinBalance(balanceAfter)
-    setCoinTransactions((previousTransactions) => [{ id: `spent-${Date.now()}`, type: 'spent', amount: 20, balanceAfter, reason: 'Hint request', problemId: round.card?.id || null, problemTitle: round.card?.title || 'No active problem', createdAt }, ...previousTransactions])
-    setHintMessage(generateBasicHint(round.card))
-    setShowHintConfirm(false)
+
+    try {
+      const savedHint = await requestPlayerHint({
+        userId: currentUser.uid,
+        sessionId: activeSessionId || '',
+        problemCardId: round.card?.id ? String(round.card.id) : '',
+        problemTitle: round.card?.title || 'No active problem',
+        hintText
+      })
+
+      const balanceAfter = toSafeNumber(savedHint.balanceAfter, currentBalance - 20)
+      const hintTransaction = {
+        id: savedHint.transactionId,
+        transactionId: savedHint.transactionId,
+        type: 'spent',
+        amount: 20,
+        balanceAfter,
+        reason: 'Hint request',
+        problemId: round.card?.id || '',
+        problemCardId: round.card?.id ? String(round.card.id) : '',
+        problemTitle: round.card?.title || 'No active problem',
+        createdAt,
+        createdAtText: createdAt
+      }
+
+      setGlaCoinBalance(balanceAfter)
+      setCoinTransactions((previousTransactions) => [hintTransaction, ...previousTransactions])
+      setDashboardData((previousDashboard) => {
+        if (!previousDashboard) return previousDashboard
+
+        return {
+          ...previousDashboard,
+          profile: {
+            ...(previousDashboard.profile || {}),
+            glaCoinBalance: balanceAfter,
+            totalGlaCoinSpent: toSafeNumber(previousDashboard.profile?.totalGlaCoinSpent) + 20,
+            totalHintsUsed: toSafeNumber(previousDashboard.profile?.totalHintsUsed) + 1
+          },
+          coinTransactions: [hintTransaction, ...(previousDashboard.coinTransactions || [])],
+          glaCoinBalance: balanceAfter,
+          totalGlaCoinSpent: toSafeNumber(previousDashboard.totalGlaCoinSpent) + 20,
+          glaCoinSpentOnHints: toSafeNumber(previousDashboard.glaCoinSpentOnHints) + 20,
+          totalHintsUsed: toSafeNumber(previousDashboard.totalHintsUsed) + 1
+        }
+      })
+      setHintMessage(hintText)
+      await loadPlayerDashboard()
+    } catch (error) {
+      console.error(error)
+      setHintMessage(error.message || 'Could not save the hint transaction to Firebase.')
+    } finally {
+      setShowHintConfirm(false)
+    }
   }
 
   function updateAccessibilitySetting(key, value) {
@@ -457,7 +559,7 @@ useEffect(() => {
     accessibilitySettings.largeText ? 'glaLargeText' : '',
     accessibilitySettings.reduceMotion ? 'glaReduceMotion' : '',
     accessibilitySettings.lowBandwidth || accessibilitySettings.saveDataMode ? 'glaLowBandwidth' : '',
-    accessibilitySettings.compactCards ? 'glaCompactCards' : '',
+    accessibilitySettings.compactMode ? 'glaCompactCards' : '',
     accessibilitySettings.showCardImages ? '' : 'glaHideCardImages'
   ].filter(Boolean).join(' ')
 
@@ -594,7 +696,11 @@ const firestoreCertificationProgress =
   dashboardData?.certificationProgress ?? certificationProgress
 
 const firestoreGlaCoinBalance =
-  dashboardData?.glaCoinBalance ?? glaCoinBalance
+  dashboardData?.glaCoinBalance !== undefined
+    ? toSafeNumber(dashboardData.glaCoinBalance)
+    : dashboardData?.profile?.glaCoinBalance !== undefined
+      ? toSafeNumber(dashboardData.profile.glaCoinBalance)
+      : toSafeNumber(glaCoinBalance)
 
 const firestoreTotalGlaCoinEarned =
   dashboardData?.totalGlaCoinEarned ?? totalGlaCoinEarned
@@ -974,7 +1080,7 @@ const pageCss = `
   .glaSidebarDrawer { position: fixed; top: 0; left: 0; bottom: 0; height: 100dvh; width: min(360px, 90vw); z-index: 2; transform: translateX(-105%); transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
   .glaSidebarOverlay.open .glaSidebarDrawer { transform: translateX(0); }
   .glaGameContent { width:100%; min-width:0; }
-  .glaJourneyTabs { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:18px; padding:10px; border-radius:26px; background:rgba(255,255,255,0.58); border:1px solid rgba(139,92,40,0.16); box-shadow:0 18px 42px rgba(80,52,20,0.1); }
+  .glaJourneyTabs { position:sticky; top:14px; z-index:80; display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:18px; padding:10px; border-radius:26px; background:linear-gradient(135deg,rgba(255,248,235,.96),rgba(244,210,138,.9)); border:1px solid rgba(139,92,40,0.2); box-shadow:0 20px 48px rgba(80,52,20,0.16); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
   .glaJourneyTabButton { border:1px solid rgba(139,92,40,0.14); border-radius:20px; padding:13px 14px; text-align:left; cursor:pointer; background:rgba(255,255,255,0.62); color:#5c3512; transition:transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease; }
   .glaJourneyTabButton:hover { transform:translateY(-2px); border-color:rgba(154,106,34,0.35); box-shadow:0 14px 28px rgba(80,52,20,0.12); }
   .glaJourneyTabButton.active { background:linear-gradient(135deg,#9a6a22,#5c3512); color:#fff8eb; border-color:rgba(244,210,138,0.4); box-shadow:0 18px 36px rgba(92,53,18,0.22); }

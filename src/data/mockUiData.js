@@ -17,10 +17,10 @@ export const rubricRows = [
   { key: 'ai_card_relevance', label: 'AI Card Relevance', max: 20, meaning: 'Selected AI cards must fit the problem.' },
   { key: 'combination_strength', label: 'Combination Strength', max: 15, meaning: 'Selected AI cards should work together.' },
   { key: 'practical_feasibility', label: 'Practical Feasibility', max: 15, meaning: 'Solution must be realistic to implement.' },
-  { key: 'african_context_and_feasibility', label: 'African Context', max: 15, meaning: 'Must consider cost, infrastructure, language and access.' },
+  { key: 'african_context_and_feasibility', label: 'African Context and Feasibility', max: 15, meaning: 'Considers African realities such as cost, infrastructure, language, access, communities, youth and public services.' },
   { key: 'sdg_alignment', label: 'SDG Alignment', max: 15, meaning: 'Solution must support the linked SDGs.' },
-  { key: 'creativity_and_innovation', label: 'Creativity', max: 10, meaning: 'Idea should be useful and original.' },
-  { key: 'ethical_and_responsible_use', label: 'Responsible AI', max: 10, meaning: 'Privacy, fairness, safety and inclusion matter.' }
+  { key: 'creativity_and_innovation', label: 'Creativity and Innovation', max: 10, meaning: 'Idea should be useful, original, imaginative and able to inspire innovation.' },
+  { key: 'ethical_and_responsible_use', label: 'Ethical and Responsible Use', max: 10, meaning: 'Considers privacy, fairness, safety, inclusion, non-discrimination and responsible AI use.' }
 ]
 
 export const demoPlayers = [

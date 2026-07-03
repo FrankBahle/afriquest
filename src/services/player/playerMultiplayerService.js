@@ -375,6 +375,99 @@ export async function getChallengeResults(roomId) {
   }))
 }
 
+
+export async function updateDebatePrompt({ roomId, prompt }) {
+  if (!roomId) throw new Error('Room ID is required.')
+  const safePrompt = cleanText(prompt)
+  if (!safePrompt) throw new Error('Debate prompt is required.')
+
+  const debateId = `${roomId}_debate`
+  await setDoc(doc(db, COLLECTIONS.debates, debateId), cleanFirestoreData({
+    debateId,
+    roomId,
+    prompt: safePrompt,
+    status: 'open',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }), { merge: true })
+
+  await updateDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), {
+    mode: 'debate',
+    status: 'active',
+    updatedAt: serverTimestamp()
+  })
+
+  return debateId
+}
+
+export async function submitDebateVote({ roomId, debateId, voterUserId, targetUserId, voteCategory }) {
+  if (!roomId) throw new Error('Room ID is required.')
+  if (!debateId) throw new Error('Debate ID is required.')
+  if (!voterUserId) throw new Error('You must be logged in to vote.')
+  if (!targetUserId) throw new Error('Choose the player you are voting for.')
+
+  const safeVoteCategory = cleanText(voteCategory) || 'strong_argument'
+  const voteId = `${debateId}_${voterUserId}_${targetUserId}`
+
+  await setDoc(doc(db, COLLECTIONS.debateVotes, voteId), cleanFirestoreData({
+    voteId,
+    debateId,
+    roomId,
+    voterUserId,
+    targetUserId,
+    voteCategory: safeVoteCategory,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }), { merge: true })
+
+  return voteId
+}
+
+export async function startTournamentRoom({ roomId, title, roundCount = 3 }) {
+  if (!roomId) throw new Error('Room ID is required.')
+
+  const tournamentId = `${roomId}_tournament`
+  await setDoc(doc(db, COLLECTIONS.tournaments, tournamentId), cleanFirestoreData({
+    tournamentId,
+    roomId,
+    title: cleanText(title) || 'AfriQuest Tournament',
+    status: 'active',
+    roundCount: Number(roundCount || 3),
+    startAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }), { merge: true })
+
+  await updateDoc(doc(db, COLLECTIONS.multiplayerRooms, roomId), {
+    mode: 'tournament',
+    status: 'active',
+    updatedAt: serverTimestamp()
+  })
+
+  return tournamentId
+}
+
+export async function saveTournamentPlayerScore({ roomId, tournamentId, userId, displayName, totalScore }) {
+  if (!roomId) throw new Error('Room ID is required.')
+  if (!tournamentId) throw new Error('Tournament ID is required.')
+  if (!userId) throw new Error('User ID is required.')
+
+  const score = Number(totalScore || 0)
+  await setDoc(doc(db, COLLECTIONS.tournamentPlayers, `${roomId}_${userId}`), cleanFirestoreData({
+    tournamentPlayerId: `${roomId}_${userId}`,
+    tournamentId,
+    roomId,
+    userId,
+    displayName: cleanText(displayName) || 'Player',
+    totalScore: score,
+    averageScore: score,
+    completedRounds: 1,
+    rank: 0,
+    updatedAt: serverTimestamp()
+  }), { merge: true })
+
+  return `${roomId}_${userId}`
+}
+
 export async function seedMultiplayerTableSamples(userId = 'sample_user') {
   const roomId = 'room_SAMPLE'
 
