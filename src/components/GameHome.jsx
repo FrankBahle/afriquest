@@ -42,7 +42,7 @@ import {
   updatePlayerProfile
 } from '../services/player/playerProfileService'
 import { seedRemainingCollections } from '../utils/seedRemainingCollections'
-
+import { seedMultiplayerRealtimeCollections } from '../utils/seedMultiplayerRealtimeCollections'
 function createRound(cards) {
   if (!cards.length) return { card: null }
   return { card: cards[Math.floor(Math.random() * cards.length)] }
@@ -163,6 +163,20 @@ function GameHome({ currentUser }) {
   const activeProblemStack = cards.filter((card) => selectedProblemIds.includes(card.id))
   const wordCount = countWords(userExplanation)
   const explanationTooLong = wordCount > 100
+
+  async function handleSeedMultiplayerRealtimeCollections() {
+  try {
+    const count = await seedMultiplayerRealtimeCollections({
+      userId: currentUser?.uid || 'schema_user',
+      displayName: currentUser?.displayName || currentUser?.email || 'Schema Player'
+    })
+
+    alert(`${count} multiplayer notification/live collections created successfully.`)
+  } catch (error) {
+    console.error(error)
+    alert(error.message || 'Could not create multiplayer notification/live collections.')
+  }
+}
 
   const completedProblemScores = useMemo(() => {
     const scoresByProblem = {}
@@ -792,7 +806,22 @@ async function loadPlayerAnalytics() {
             {cardError}
           </p>
         )}
-
+<button
+  type="button"
+  onClick={handleSeedMultiplayerRealtimeCollections}
+  style={{
+    marginBottom: '18px',
+    padding: '12px 18px',
+    borderRadius: '999px',
+    border: 'none',
+    cursor: 'pointer',
+    background: '#5c3512',
+    color: '#fff8eb',
+    fontWeight: 900
+  }}
+>
+  Create Multiplayer Notification Collections
+</button>
 
 
 

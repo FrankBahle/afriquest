@@ -1,93 +1,305 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { LoadingPage, Pill, SectionHeader } from './ui'
+import { Pill, SectionHeader } from './ui'
 import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
 import {
+  acceptConnectionRequest,
+  acceptRoomInvite,
+  acceptRoomJoinRequest,
   createMultiplayerRoom,
-  getChallengeResults,
-  getChallengeRoomDetails,
-  getMultiplayerHubData,
+  createRoomInvite,
+  createTeam,
+  declineConnectionRequest,
+  declineRoomInvite,
+  declineRoomJoinRequest,
+  endMultiplayerRoom,
+  finishTournamentRoom,
   joinMultiplayerRoom,
-  startChallengeRoom
+  joinTeam,
+  markNotificationRead,
+  requestToJoinRoom,
+  seedMultiplayerRealtimeCollections,
+  sendPlayerConnectionRequest,
+  setTournamentRound,
+  startChallengeRoom,
+  startTeamRoom,
+  startTournamentRoom,
+  submitChallengeAttempt,
+  submitDebateArgument,
+  submitDebateVote,
+  submitTeamSolution,
+  submitTournamentRound,
+  subscribeMultiplayerHubData,
+  subscribePlayerConnections,
+  subscribeRoomDetails,
+  subscribeUserNotifications,
+  updateDebatePrompt,
+  updatePlayerPresence
 } from '../../services/player/playerMultiplayerService'
 
 const modeDetails = {
   challenge: {
     label: 'Challenge',
-    title: 'Live challenge rooms',
-    description: 'Players compete on problem cards and compare scored solutions.',
+    title: 'Challenge Mode',
+    description: 'Everyone solves the same problem individually and compares ranked scores.',
     accent: '⚔️'
   },
   team: {
     label: 'Team',
-    title: 'Team collaboration',
-    description: 'Players can be grouped into teams for shared SDG problem solving.',
+    title: 'Team Mode',
+    description: 'Players join teams and submit one shared team solution.',
     accent: '🤝'
   },
   debate: {
     label: 'Debate',
-    title: 'Debate arena',
-    description: 'Players defend ideas, vote on strong arguments and build ethical AI reasoning.',
+    title: 'Debate Mode',
+    description: 'Players submit arguments and vote for the strongest reasoning.',
     accent: '🎙️'
   },
   tournament: {
     label: 'Tournament',
-    title: 'Tournament bracket',
-    description: 'Structured rounds for competitive AfriQuest events and showcases.',
+    title: 'Tournament Mode',
+    description: 'Players compete over multiple timed rounds with a live leaderboard.',
     accent: '🏆'
   }
 }
+
+const voteCategories = [
+  { value: 'most_realistic', label: 'Most realistic' },
+  { value: 'most_innovative', label: 'Most innovative' },
+  { value: 'most_ethical', label: 'Most ethical' },
+  { value: 'most_scalable_african_solution', label: 'Most scalable African solution' }
+]
 
 function MultiplayerHubScreen({ fullName = 'Player' }) {
   const { currentUser } = useAuth()
   const { t } = usePlayerLanguage()
 
-  const [hubData, setHubData] = useState({
-    rooms: [],
-    roomPlayers: [],
-    teams: [],
-    teamSessions: [],
-    debates: [],
-    debateVotes: [],
-    tournaments: [],
-    tournamentPlayers: []
-  })
+  const [page, setPage] = useState('home')
+  const [hubData, setHubData] = useState(emptyHubData)
+  const [selectedRoomId, setSelectedRoomId] = useState('')
+  const [selectedRoomDetails, setSelectedRoomDetails] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [connections, setConnections] = useState([])
+  const [activeMode, setActiveMode] = useState('challenge')
+  const [modeFilter, setModeFilter] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [roomLoading, setRoomLoading] = useState(false)
 
   const [roomName, setRoomName] = useState('')
   const [mode, setMode] = useState('challenge')
   const [maxPlayers, setMaxPlayers] = useState('4')
+  const [requiresApproval, setRequiresApproval] = useState(false)
+  const [questTitle, setQuestTitle] = useState('')
   const [joinCode, setJoinCode] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [modeFilter, setModeFilter] = useState('all')
-  const [activeMode, setActiveMode] = useState('challenge')
-  const [statusMessage, setStatusMessage] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [joinRequestMessage, setJoinRequestMessage] = useState('')
+  const [inviteUserId, setInviteUserId] = useState('')
+  const [connectionUserId, setConnectionUserId] = useState('')
 
-  const [selectedRoomId, setSelectedRoomId] = useState('')
-  const [selectedRoomDetails, setSelectedRoomDetails] = useState(null)
-  const [challengeProblemId, setChallengeProblemId] = useState('')
-  const [challengeResults, setChallengeResults] = useState([])
-  const [roomLoading, setRoomLoading] = useState(false)
+  const [problemCardId, setProblemCardId] = useState('')
+  const [problemTitle, setProblemTitle] = useState('')
+  const [selectedAiCardIds, setSelectedAiCardIds] = useState('')
+  const [selectedAiCardTitles, setSelectedAiCardTitles] = useState('')
+  const [explanation, setExplanation] = useState('')
+  const [endReason, setEndReason] = useState('Session completed.')
 
-  async function loadHubData() {
-    setLoading(true)
-    setError('')
+  const [teamName, setTeamName] = useState('')
+  const [selectedTeamId, setSelectedTeamId] = useState('')
+  const [debatePrompt, setDebatePrompt] = useState('')
+  const [voteCategory, setVoteCategory] = useState('most_realistic')
+  const [voteTargetUserId, setVoteTargetUserId] = useState('')
+  const [tournamentTitle, setTournamentTitle] = useState('')
+  const [roundCount, setRoundCount] = useState('3')
+  const [roundNumber, setRoundNumber] = useState('1')
 
-    try {
-      const data = await getMultiplayerHubData()
-      setHubData(data)
-    } catch (err) {
-      setError(err.message || 'Could not load multiplayer data from Firebase.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const userId = currentUser?.uid || ''
+  const displayName = fullName || currentUser?.displayName || currentUser?.email || 'Player'
+  const selectedRoom = selectedRoomDetails?.room || null
+  const selectedMode = selectedRoom?.mode || activeMode || 'challenge'
+  const currentPlayer = selectedRoomDetails?.roomPlayers?.find((player) => player.userId === userId)
+  const isHost = selectedRoom?.createdBy === userId || currentPlayer?.role === 'host'
+  const selectedTournament = selectedRoomDetails?.tournaments?.[0] || null
+  const selectedDebate = selectedRoomDetails?.debates?.[0] || null
+  const unreadCount = notifications.filter((item) => item.status === 'unread').length
 
   useEffect(() => {
-    loadHubData()
+    setLoading(true)
+    const unsubscribe = subscribeMultiplayerHubData((data) => {
+      setHubData(data)
+      setLoading(false)
+    })
+    return unsubscribe
   }, [])
+
+  useEffect(() => {
+    if (!userId) return
+    const unsubscribe = subscribeUserNotifications(userId, setNotifications)
+    return unsubscribe
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
+    const unsubscribe = subscribePlayerConnections(userId, setConnections)
+    return unsubscribe
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
+
+    updatePlayerPresence({
+      userId,
+      displayName,
+      status: 'online',
+      currentRoomId: selectedRoomId,
+      currentRoomCode: selectedRoom?.roomCode || '',
+      currentScreen: 'Multiplayer'
+    })
+
+    const interval = setInterval(() => {
+      updatePlayerPresence({
+        userId,
+        displayName,
+        status: 'online',
+        currentRoomId: selectedRoomId,
+        currentRoomCode: selectedRoom?.roomCode || '',
+        currentScreen: 'Multiplayer'
+      })
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [userId, displayName, selectedRoomId, selectedRoom?.roomCode])
+
+  useEffect(() => {
+    if (!selectedRoomId) {
+      setSelectedRoomDetails(null)
+      return
+    }
+
+    setRoomLoading(true)
+    const unsubscribe = subscribeRoomDetails(selectedRoomId, (details) => {
+      setSelectedRoomDetails(details)
+      setRoomLoading(false)
+
+      if (details?.room) {
+        setActiveMode(details.room.mode || 'challenge')
+        setProblemCardId(details.room.currentProblemId || '')
+        setProblemTitle(details.room.currentProblemTitle || '')
+        setQuestTitle(details.room.currentQuestTitle || '')
+        setRoundNumber(String(details.room.currentRound || 1))
+      }
+    })
+
+    return unsubscribe
+  }, [selectedRoomId])
+
+  const rooms = hubData.rooms || []
+
+  const presenceByUserId = useMemo(() => {
+    const lookup = {}
+    ;(hubData.presence || []).forEach((item) => {
+      lookup[item.userId] = item
+    })
+    return lookup
+  }, [hubData.presence])
+
+  const livePlayerCount = useMemo(() => {
+    return Object.values(presenceByUserId).filter((presence) => isPresenceOnline(presence)).length
+  }, [presenceByUserId])
+
+  const modeCounts = useMemo(() => {
+    return rooms.reduce((counts, room) => {
+      counts[room.mode] = Number(counts[room.mode] || 0) + 1
+      return counts
+    }, {})
+  }, [rooms])
+
+  const filteredRooms = useMemo(() => {
+    const cleanSearch = searchTerm.trim().toLowerCase()
+
+    return rooms.filter((room) => {
+      const text = [room.roomName, room.roomCode, room.mode, room.status, room.createdByName, room.currentQuestTitle]
+        .join(' ')
+        .toLowerCase()
+
+      const matchesSearch = !cleanSearch || text.includes(cleanSearch)
+      const matchesMode = modeFilter === 'all' || room.mode === modeFilter
+      const matchesActiveMode = activeMode === 'all' || room.mode === activeMode
+
+      return matchesSearch && matchesMode && matchesActiveMode
+    })
+  }, [rooms, searchTerm, modeFilter, activeMode])
+
+  const challengeResults = useMemo(() => rankRows(
+    (selectedRoomDetails?.roomAttempts || []).filter((attempt) => attempt.multiplayerMode === 'challenge')
+  ), [selectedRoomDetails?.roomAttempts])
+
+  const debateArguments = useMemo(() => rankRows(
+    (selectedRoomDetails?.roomAttempts || []).filter((attempt) => attempt.multiplayerMode === 'debate')
+  ), [selectedRoomDetails?.roomAttempts])
+
+  const debateVoteSummary = useMemo(() => {
+    const summary = {}
+
+    ;(selectedRoomDetails?.debateVotes || []).forEach((vote) => {
+      const key = `${vote.targetUserId}_${vote.voteCategory}`
+      if (!summary[key]) {
+        summary[key] = {
+          targetUserId: vote.targetUserId,
+          targetDisplayName: vote.targetDisplayName || vote.targetUserId,
+          voteCategory: vote.voteCategory,
+          count: 0
+        }
+      }
+      summary[key].count += 1
+    })
+
+    return Object.values(summary).sort((a, b) => b.count - a.count)
+  }, [selectedRoomDetails?.debateVotes])
+
+  const tournamentLeaderboard = useMemo(() => {
+    return [...(selectedRoomDetails?.tournamentPlayers || [])]
+      .sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999) || Number(b.totalScore || 0) - Number(a.totalScore || 0))
+  }, [selectedRoomDetails?.tournamentPlayers])
+
+  function handleError(err, fallback) {
+    console.error(err)
+    setError(err.message || fallback)
+  }
+
+  function resetPlayForm() {
+    setSelectedAiCardIds('')
+    setSelectedAiCardTitles('')
+    setExplanation('')
+  }
+
+  function openRoom(roomId) {
+    setError('')
+    setStatusMessage('')
+    setSelectedRoomId(roomId)
+    setPage('room')
+  }
+
+  function goHome() {
+    setPage('home')
+    setSelectedRoomId('')
+    setSelectedRoomDetails(null)
+  }
+
+  async function handleSeedCollections() {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const count = await seedMultiplayerRealtimeCollections({ userId: userId || 'schema_user', displayName })
+      setStatusMessage(`${count} multiplayer setup checked.`)
+    } catch (err) {
+      handleError(err, 'Could not create multiplayer collections.')
+    }
+  }
 
   async function handleCreateRoom(event) {
     event.preventDefault()
@@ -96,21 +308,23 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
 
     try {
       const roomId = await createMultiplayerRoom({
-        userId: currentUser?.uid,
-        displayName: fullName,
+        userId,
+        displayName,
         roomName,
         mode,
-        maxPlayers
+        maxPlayers,
+        requiresApproval,
+        questTitle
       })
 
       setRoomName('')
+      setQuestTitle('')
       setActiveMode(mode)
       setModeFilter(mode)
-      setStatusMessage(`${modeDetails[mode]?.label || 'Room'} created and saved to Firebase.`)
-      await loadHubData()
-      await handleOpenRoom(roomId)
+      openRoom(roomId)
+      setStatusMessage(`${modeDetails[mode]?.label || 'Room'} room created. Lobby is open.`)
     } catch (err) {
-      setError(err.message || 'Could not create multiplayer room.')
+      handleError(err, 'Could not create multiplayer room.')
     }
   }
 
@@ -120,403 +334,1535 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     setStatusMessage('')
 
     try {
-      const roomId = await joinMultiplayerRoom({
-        userId: currentUser?.uid,
-        displayName: fullName,
-        roomCode: joinCode
-      })
-
+      const roomId = await joinMultiplayerRoom({ userId, displayName, roomCode: joinCode })
       setJoinCode('')
-      setStatusMessage('Room joined successfully and saved to Firebase.')
-      await loadHubData()
-      await handleOpenRoom(roomId)
+      openRoom(roomId)
+      setStatusMessage('Room joined successfully.')
     } catch (err) {
-      setError(err.message || 'Could not join multiplayer room.')
+      handleError(err, 'Could not join multiplayer room.')
     }
   }
 
-  async function handleOpenRoom(roomId) {
-    setError('')
-    setStatusMessage('')
-    setSelectedRoomId(roomId)
-    setRoomLoading(true)
-
-    try {
-      const details = await getChallengeRoomDetails(roomId)
-      const results = await getChallengeResults(roomId)
-
-      setSelectedRoomDetails(details)
-      setChallengeResults(results)
-      setChallengeProblemId(details.room.currentProblemId || '')
-      setActiveMode(details.room.mode || 'challenge')
-      setModeFilter(details.room.mode || 'all')
-    } catch (err) {
-      setError(err.message || 'Could not open multiplayer room.')
-    } finally {
-      setRoomLoading(false)
-    }
-  }
-
-  async function handleStartChallenge() {
+  async function handleRequestJoinRoom(roomId) {
     setError('')
     setStatusMessage('')
 
     try {
-      if (!selectedRoomId) throw new Error('Open a room first.')
+      await requestToJoinRoom({ roomId, userId, displayName, message: joinRequestMessage })
+      setJoinRequestMessage('')
+      setStatusMessage('Join request sent to the host.')
+    } catch (err) {
+      handleError(err, 'Could not send join request.')
+    }
+  }
 
-      await startChallengeRoom({
+  async function handleAcceptRoomRequest(requestId) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await acceptRoomJoinRequest({ requestId, hostUserId: userId })
+      setStatusMessage('Room request accepted.')
+    } catch (err) {
+      handleError(err, 'Could not accept room request.')
+    }
+  }
+
+  async function handleDeclineRoomRequest(requestId) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await declineRoomJoinRequest({ requestId, hostUserId: userId })
+      setStatusMessage('Room request declined.')
+    } catch (err) {
+      handleError(err, 'Could not decline room request.')
+    }
+  }
+
+  async function handleSendInvite(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await createRoomInvite({
         roomId: selectedRoomId,
-        problemCardId: challengeProblemId
+        recipientUserId: inviteUserId,
+        senderUserId: userId,
+        senderDisplayName: displayName
       })
 
-      const details = await getChallengeRoomDetails(selectedRoomId)
-      const results = await getChallengeResults(selectedRoomId)
-
-      setSelectedRoomDetails(details)
-      setChallengeResults(results)
-      setStatusMessage('Challenge started successfully.')
-      await loadHubData()
+      setInviteUserId('')
+      setStatusMessage('Invite notification sent.')
     } catch (err) {
-      setError(err.message || 'Could not start challenge.')
+      handleError(err, 'Could not send invite.')
     }
   }
 
-  function handleCloseRoom() {
-    setSelectedRoomId('')
-    setSelectedRoomDetails(null)
-    setChallengeResults([])
-    setChallengeProblemId('')
+  async function handleConnectionRequest(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await sendPlayerConnectionRequest({ fromUserId: userId, fromDisplayName: displayName, toUserId: connectionUserId })
+      setConnectionUserId('')
+      setStatusMessage('Connection request sent.')
+    } catch (err) {
+      handleError(err, 'Could not send connection request.')
+    }
   }
 
-  const rooms = hubData.rooms || []
+  async function handleNotificationAction(notification) {
+    setError('')
+    setStatusMessage('')
 
-  const filteredRooms = useMemo(() => {
-    const cleanSearch = searchTerm.trim().toLowerCase()
+    try {
+      if (notification.actionType === 'accept_room_invite') {
+        const roomId = await acceptRoomInvite({ notificationId: notification.notificationId, userId, displayName })
+        openRoom(roomId)
+        setStatusMessage('Invite accepted. You joined the room.')
+        return
+      }
 
-    return rooms.filter((room) => {
-      const text = [room.roomName, room.roomCode, room.mode, room.status, room.createdByName]
-        .join(' ')
-        .toLowerCase()
+      if (notification.actionType === 'accept_connection_request') {
+        await acceptConnectionRequest({
+          requestId: notification.actionData?.requestId,
+          currentUserId: userId,
+          currentDisplayName: displayName
+        })
+        await markNotificationRead(notification.notificationId)
+        setStatusMessage('Connection request accepted.')
+        return
+      }
 
-      const matchesSearch = !cleanSearch || text.includes(cleanSearch)
-      const matchesMode = modeFilter === 'all' || room.mode === modeFilter
+      if (notification.actionData?.roomId) {
+        openRoom(notification.actionData.roomId)
+      }
 
-      return matchesSearch && matchesMode
-    })
-  }, [rooms, searchTerm, modeFilter])
+      await markNotificationRead(notification.notificationId)
+    } catch (err) {
+      handleError(err, 'Could not complete notification action.')
+    }
+  }
 
-  const activeModeRooms = filteredRooms.filter((room) => activeMode === 'all' || room.mode === activeMode)
-  const selectedModeMeta = modeDetails[activeMode] || modeDetails.challenge
+  async function handleDeclineNotification(notification) {
+    setError('')
+    setStatusMessage('')
 
-  const modeCounts = useMemo(() => {
-    return rooms.reduce(
-      (total, room) => ({
-        ...total,
-        [room.mode]: Number(total[room.mode] || 0) + 1
-      }),
-      {}
-    )
-  }, [rooms])
+    try {
+      if (notification.actionType === 'accept_room_invite') {
+        await declineRoomInvite(notification.notificationId)
+      } else if (notification.actionType === 'accept_connection_request') {
+        await declineConnectionRequest({ requestId: notification.actionData?.requestId })
+        await markNotificationRead(notification.notificationId)
+      } else {
+        await markNotificationRead(notification.notificationId)
+      }
 
-  if (loading) {
-    return (
-      <LoadingPage
-        title="Loading multiplayer arena"
-        message="Fetching live rooms, debate spaces and tournaments from Firebase."
-      />
-    )
+      setStatusMessage('Notification updated.')
+    } catch (err) {
+      handleError(err, 'Could not update notification.')
+    }
+  }
+
+  async function handleStartChallenge(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await startChallengeRoom({ roomId: selectedRoomId, problemCardId, problemTitle, actorUserId: userId, actorDisplayName: displayName })
+      setStatusMessage('Challenge started. Players can now submit answers.')
+    } catch (err) {
+      handleError(err, 'Could not start challenge.')
+    }
+  }
+
+  async function handleSubmitChallenge(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const result = await submitChallengeAttempt({
+        roomId: selectedRoomId,
+        userId,
+        displayName,
+        problemCardId: problemCardId || selectedRoom?.currentProblemId,
+        problemTitle: problemTitle || selectedRoom?.currentProblemTitle,
+        selectedAiCardIds,
+        selectedAiCardTitles,
+        explanation
+      })
+
+      resetPlayForm()
+      setStatusMessage(`Challenge submitted. Score: ${result.totalScore}/100.`)
+    } catch (err) {
+      handleError(err, 'Could not submit challenge answer.')
+    }
+  }
+
+  async function handleCreateTeam(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const teamId = await createTeam({ roomId: selectedRoomId, teamName, userId, displayName })
+      setSelectedTeamId(teamId)
+      setTeamName('')
+      setStatusMessage('Team created and joined.')
+    } catch (err) {
+      handleError(err, 'Could not create team.')
+    }
+  }
+
+  async function handleJoinTeam(teamId) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await joinTeam({ roomId: selectedRoomId, teamId, userId, displayName })
+      setSelectedTeamId(teamId)
+      setStatusMessage('Team joined.')
+    } catch (err) {
+      handleError(err, 'Could not join team.')
+    }
+  }
+
+  async function handleStartTeamMode(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await startTeamRoom({ roomId: selectedRoomId, problemCardId, problemTitle, actorUserId: userId, actorDisplayName: displayName })
+      setStatusMessage('Team room started.')
+    } catch (err) {
+      handleError(err, 'Could not start team room.')
+    }
+  }
+
+  async function handleSubmitTeam(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const teamId = selectedTeamId || currentPlayer?.teamId
+      const result = await submitTeamSolution({
+        roomId: selectedRoomId,
+        teamId,
+        userId,
+        displayName,
+        problemCardId: problemCardId || selectedRoom?.currentProblemId,
+        problemTitle: problemTitle || selectedRoom?.currentProblemTitle,
+        selectedAiCardIds,
+        selectedAiCardTitles,
+        explanation
+      })
+
+      resetPlayForm()
+      setStatusMessage(`Team solution submitted. Score: ${result.totalScore}/100.`)
+    } catch (err) {
+      handleError(err, 'Could not submit team solution.')
+    }
+  }
+
+  async function handleSetDebatePrompt(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await updateDebatePrompt({ roomId: selectedRoomId, prompt: debatePrompt, actorUserId: userId, actorDisplayName: displayName })
+      setDebatePrompt('')
+      setStatusMessage('Debate prompt saved. Players can now submit arguments.')
+    } catch (err) {
+      handleError(err, 'Could not save debate prompt.')
+    }
+  }
+
+  async function handleSubmitDebateArgument(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const debateId = selectedDebate?.debateId || `${selectedRoomId}_debate`
+      const result = await submitDebateArgument({
+        roomId: selectedRoomId,
+        debateId,
+        userId,
+        displayName,
+        argumentText: explanation,
+        selectedAiCardIds,
+        selectedAiCardTitles
+      })
+
+      resetPlayForm()
+      setStatusMessage(`Debate argument submitted. Score: ${result.totalScore}/100.`)
+    } catch (err) {
+      handleError(err, 'Could not submit debate argument.')
+    }
+  }
+
+  async function handleVote(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const targetPlayer = selectedRoomDetails?.roomPlayers?.find((player) => player.userId === voteTargetUserId)
+      await submitDebateVote({
+        roomId: selectedRoomId,
+        debateId: selectedDebate?.debateId || `${selectedRoomId}_debate`,
+        voterUserId: userId,
+        voterDisplayName: displayName,
+        targetUserId: voteTargetUserId,
+        targetDisplayName: targetPlayer?.displayName || voteTargetUserId,
+        voteCategory
+      })
+
+      setVoteTargetUserId('')
+      setStatusMessage('Debate vote saved.')
+    } catch (err) {
+      handleError(err, 'Could not submit vote.')
+    }
+  }
+
+  async function handleStartTournament(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await startTournamentRoom({ roomId: selectedRoomId, title: tournamentTitle || selectedRoom?.roomName, roundCount, createdBy: userId, createdByName: displayName })
+      setStatusMessage('Tournament started.')
+    } catch (err) {
+      handleError(err, 'Could not start tournament.')
+    }
+  }
+
+  async function handleSetTournamentRound(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await setTournamentRound({
+        roomId: selectedRoomId,
+        tournamentId: selectedTournament?.tournamentId,
+        roundNumber,
+        problemCardId,
+        problemTitle,
+        actorUserId: userId,
+        actorDisplayName: displayName
+      })
+
+      setStatusMessage(`Round ${roundNumber} is ready.`)
+    } catch (err) {
+      handleError(err, 'Could not set tournament round.')
+    }
+  }
+
+  async function handleSubmitTournamentRound(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const result = await submitTournamentRound({
+        roomId: selectedRoomId,
+        tournamentId: selectedTournament?.tournamentId,
+        userId,
+        displayName,
+        roundNumber,
+        problemCardId: problemCardId || selectedRoom?.currentProblemId,
+        problemTitle: problemTitle || selectedRoom?.currentProblemTitle,
+        selectedAiCardIds,
+        selectedAiCardTitles,
+        explanation
+      })
+
+      resetPlayForm()
+      setStatusMessage(`Round submitted. Round score: ${result.totalScore}/100.`)
+    } catch (err) {
+      handleError(err, 'Could not submit tournament round.')
+    }
+  }
+
+  async function handleFinishTournament() {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await finishTournamentRoom({ roomId: selectedRoomId, tournamentId: selectedTournament?.tournamentId, actorUserId: userId, actorDisplayName: displayName })
+      setStatusMessage('Tournament completed and leaderboard finalised.')
+    } catch (err) {
+      handleError(err, 'Could not finish tournament.')
+    }
+  }
+
+  async function handleEndRoom(event) {
+    event.preventDefault()
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await endMultiplayerRoom({ roomId: selectedRoomId, actorUserId: userId, actorDisplayName: displayName, endReason })
+      setStatusMessage('Room ended successfully.')
+    } catch (err) {
+      handleError(err, 'Could not end room.')
+    }
   }
 
   return (
     <div style={styles.panel}>
-      <div style={heroStyle}>
+      <style>{pageCss}</style>
+
+      <div className="mpHero">
         <div>
-          <p style={styles.eyebrow}>Multiplayer arena</p>
-          <h1 style={heroTitleStyle}>Compete, debate and solve SDG challenges together.</h1>
-          <p style={heroTextStyle}>
-            Create a room, share the code and let players join a professional AfriQuest game lobby connected to Firebase.
+          <h1 className="mpHeroTitle">Live multiplayer arena</h1>
+          <p className="mpHeroText">
+            Create rooms, request access, open lobbies, start rounds, submit answers, end sessions and track timestamps.
           </p>
         </div>
+        <div className="mpHeroStatsWrap">
+          <div className="mpHeroStats">
+            <strong>{rooms.length}</strong>
+            <span>rooms</span>
+            <small>{unreadCount} unread</small>
+          </div>
 
-        <div style={heroStatStyle}>
-          <span style={heroStatNumberStyle}>{rooms.length}</span>
-          <span style={heroStatLabelStyle}>active rooms</span>
+          <div className="mpHeroStats live">
+            <span className="mpLivePulse"></span>
+            <strong>{livePlayerCount}</strong>
+            <span>live players</span>
+            <small>currently online</small>
+          </div>
         </div>
       </div>
 
+      
 
-      <SectionHeader eyebrow={t('multiplayer')} title={t('multiplayerTitle')}>
-        {t('multiplayerHelp')}
-      </SectionHeader>
+      <PageTabs page={page} unreadCount={unreadCount} onChange={setPage} onHome={goHome} />
 
       {error && <MessageCard message={error} tone="error" />}
       {statusMessage && <MessageCard message={statusMessage} tone="success" />}
 
-      <div style={arenaCardsStyle}>
-        <div style={actionPanelStyle}>
-          <p style={styles.eyebrow}>{t('createRoom')}</p>
-          <h3 style={styles.smallCardTitle}>Host a new game room</h3>
+      {loading && <div style={cardStyle}><p style={styles.smallCardText}>Loading live multiplayer data...</p></div>}
 
-          <form onSubmit={handleCreateRoom} style={formGridStyle}>
-            <label style={fieldStyle}>
-              {t('roomName')}
-              <input
-                value={roomName}
-                onChange={(event) => setRoomName(event.target.value)}
-                placeholder="Example: GLA SDG Final Room"
-                style={inputStyle}
-              />
-            </label>
+      {!loading && page === 'home' && (
+        <HomePage
+          rooms={filteredRooms}
+          allRooms={rooms}
+          connections={connections}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          activeMode={activeMode}
+          modeFilter={modeFilter}
+          searchTerm={searchTerm}
+          modeCounts={modeCounts}
+          presenceByUserId={presenceByUserId}
+          joinRequestMessage={joinRequestMessage}
+          onModeChange={(nextMode) => {
+            setActiveMode(nextMode)
+            setModeFilter(nextMode)
+            setMode(nextMode)
+          }}
+          onModeFilterChange={setModeFilter}
+          onSearchChange={setSearchTerm}
+          onCreate={() => setPage('create')}
+          onJoin={() => setPage('join')}
+          onOpen={openRoom}
+          onRequest={handleRequestJoinRoom}
+          onSeed={handleSeedCollections}
+          onJoinRequestMessageChange={setJoinRequestMessage}
+          onNotificationAction={handleNotificationAction}
+          onNotificationDecline={handleDeclineNotification}
+          onMarkRead={markNotificationRead}
+          connectionUserId={connectionUserId}
+          onConnectionUserIdChange={setConnectionUserId}
+          onSendConnectionRequest={handleConnectionRequest}
+        />
+      )}
 
-            <div style={modeChoiceGridStyle}>
-              {Object.entries(modeDetails).map(([key, item]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setMode(key)}
-                  style={mode === key ? selectedModeButtonStyle : modeButtonStyle}
-                >
-                  <span style={modeIconStyle}>{item.accent}</span>
-                  <strong>{item.label}</strong>
-                  <small>{item.description}</small>
-                </button>
-              ))}
-            </div>
+      {!loading && page === 'create' && (
+        <CreateRoomPage
+          roomName={roomName}
+          mode={mode}
+          maxPlayers={maxPlayers}
+          requiresApproval={requiresApproval}
+          questTitle={questTitle}
+          onRoomNameChange={setRoomName}
+          onModeChange={setMode}
+          onMaxPlayersChange={setMaxPlayers}
+          onRequiresApprovalChange={setRequiresApproval}
+          onQuestTitleChange={setQuestTitle}
+          onCreate={handleCreateRoom}
+          onBack={() => setPage('home')}
+        />
+      )}
 
-            <label style={fieldStyle}>
-              Max players
-              <select value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} style={inputStyle}>
-                <option value="2">2 players</option>
-                <option value="4">4 players</option>
-                <option value="8">8 players</option>
-                <option value="12">12 players</option>
-              </select>
-            </label>
+      {!loading && page === 'join' && (
+        <JoinRoomPage
+          joinCode={joinCode}
+          joinRequestMessage={joinRequestMessage}
+          rooms={rooms}
+          presenceByUserId={presenceByUserId}
+          onJoinCodeChange={setJoinCode}
+          onJoinRequestMessageChange={setJoinRequestMessage}
+          onJoin={handleJoinRoom}
+          onRequest={handleRequestJoinRoom}
+          onOpen={openRoom}
+          onBack={() => setPage('home')}
+        />
+      )}
 
-            <button type="submit" style={primaryButtonStyle}>
-              Create {modeDetails[mode]?.label || 'Room'} Room
-            </button>
-          </form>
+      {!loading && page === 'notifications' && (
+        <NotificationsPage
+          notifications={notifications}
+          unreadCount={unreadCount}
+          connections={connections}
+          presenceByUserId={presenceByUserId}
+          connectionUserId={connectionUserId}
+          onConnectionUserIdChange={setConnectionUserId}
+          onSendConnectionRequest={handleConnectionRequest}
+          onNotificationAction={handleNotificationAction}
+          onNotificationDecline={handleDeclineNotification}
+          onMarkRead={markNotificationRead}
+        />
+      )}
+
+      {!loading && page === 'room' && selectedRoom && (
+        <RoomPage
+          roomLoading={roomLoading}
+          selectedRoom={selectedRoom}
+          selectedRoomDetails={selectedRoomDetails}
+          selectedMode={selectedMode}
+          isHost={isHost}
+          currentPlayer={currentPlayer}
+          presenceByUserId={presenceByUserId}
+          inviteUserId={inviteUserId}
+          endReason={endReason}
+          problemCardId={problemCardId}
+          problemTitle={problemTitle}
+          selectedAiCardIds={selectedAiCardIds}
+          selectedAiCardTitles={selectedAiCardTitles}
+          explanation={explanation}
+          teamName={teamName}
+          selectedTeamId={selectedTeamId || currentPlayer?.teamId || ''}
+          debatePrompt={debatePrompt}
+          voteCategory={voteCategory}
+          voteTargetUserId={voteTargetUserId}
+          tournamentTitle={tournamentTitle}
+          roundCount={roundCount}
+          roundNumber={roundNumber}
+          selectedTournament={selectedTournament}
+          selectedDebate={selectedDebate}
+          challengeResults={challengeResults}
+          debateArguments={debateArguments}
+          debateVoteSummary={debateVoteSummary}
+          tournamentLeaderboard={tournamentLeaderboard}
+          onInviteUserIdChange={setInviteUserId}
+          onSendInvite={handleSendInvite}
+          onEndReasonChange={setEndReason}
+          onEndRoom={handleEndRoom}
+          onAcceptRoomRequest={handleAcceptRoomRequest}
+          onDeclineRoomRequest={handleDeclineRoomRequest}
+          onProblemCardIdChange={setProblemCardId}
+          onProblemTitleChange={setProblemTitle}
+          onSelectedAiCardIdsChange={setSelectedAiCardIds}
+          onSelectedAiCardTitlesChange={setSelectedAiCardTitles}
+          onExplanationChange={setExplanation}
+          onStartChallenge={handleStartChallenge}
+          onSubmitChallenge={handleSubmitChallenge}
+          onTeamNameChange={setTeamName}
+          onSelectedTeamIdChange={setSelectedTeamId}
+          onCreateTeam={handleCreateTeam}
+          onJoinTeam={handleJoinTeam}
+          onStartTeam={handleStartTeamMode}
+          onSubmitTeam={handleSubmitTeam}
+          onDebatePromptChange={setDebatePrompt}
+          onSetDebatePrompt={handleSetDebatePrompt}
+          onSubmitDebateArgument={handleSubmitDebateArgument}
+          onVoteCategoryChange={setVoteCategory}
+          onVoteTargetUserIdChange={setVoteTargetUserId}
+          onVote={handleVote}
+          onTournamentTitleChange={setTournamentTitle}
+          onRoundCountChange={setRoundCount}
+          onRoundNumberChange={setRoundNumber}
+          onStartTournament={handleStartTournament}
+          onSetTournamentRound={handleSetTournamentRound}
+          onSubmitTournamentRound={handleSubmitTournamentRound}
+          onFinishTournament={handleFinishTournament}
+          onBack={() => setPage('home')}
+        />
+      )}
+
+      {!loading && page === 'room' && selectedRoomId && !selectedRoom && (
+        <div style={cardStyle}>
+          <h3 style={styles.smallCardTitle}>Opening lobby...</h3>
+          <p style={styles.smallCardText}>Syncing the live room details.</p>
         </div>
+      )}
 
-        <div style={actionPanelStyle}>
-          <p style={styles.eyebrow}>{t('joinRoom')}</p>
-          <h3 style={styles.smallCardTitle}>Join using a room code</h3>
-          <p style={styles.smallCardText}>Ask the host for the 6-character code, then join the lobby immediately.</p>
-
-          <form onSubmit={handleJoinRoom} style={formGridStyle}>
-            <label style={fieldStyle}>
-              {t('roomCode')}
-              <input
-                value={joinCode}
-                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                placeholder="Example: ABC123"
-                style={{ ...inputStyle, fontSize: '1.2rem', letterSpacing: '0.12em', fontWeight: 900 }}
-              />
-            </label>
-
-            <button type="submit" style={primaryButtonStyle}>
-              Join Room
-            </button>
-          </form>
-
-          <div style={databaseStripStyle}>
-            <p style={styles.eyebrow}>Firebase linked</p>
-            <div style={databaseGridStyle}>
-              <MiniStat title="Players" value={hubData.roomPlayers.length} />
-              <MiniStat title="Debates" value={hubData.debates.length} />
-              <MiniStat title="Tournaments" value={hubData.tournaments.length} />
-              <MiniStat title="Votes" value={hubData.debateVotes.length} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={stickyArenaNavStyle}>
-        {Object.entries(modeDetails).map(([key, item]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => {
-              setActiveMode(key)
-              setModeFilter(key)
-            }}
-            style={activeMode === key ? activeNavButtonStyle : navButtonStyle}
-          >
-            <span style={navIconStyle}>{item.accent}</span>
-            <span>{item.label}</span>
-            <small style={navCountStyle}>{modeCounts[key] || 0}</small>
-          </button>
-        ))}
-      </div>
-
-      <div style={sectionCardStyle}>
-        <div style={styles.rowBetween}>
-          <div>
-            <p style={styles.eyebrow}>{selectedModeMeta.label} lobby</p>
-            <h3 style={styles.smallCardTitle}>{selectedModeMeta.title}</h3>
-            <p style={styles.smallCardText}>{selectedModeMeta.description}</p>
-          </div>
-
-          <Pill>{loading ? 'Loading' : `${activeModeRooms.length} rooms`}</Pill>
-        </div>
-
-        <div style={filterGridStyle}>
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search room name, code or host..."
-            style={inputStyle}
-          />
-
-          <select value={modeFilter} onChange={(event) => setModeFilter(event.target.value)} style={inputStyle}>
-            <option value="all">All modes</option>
-            <option value="challenge">Challenge</option>
-            <option value="team">Team</option>
-            <option value="debate">Debate</option>
-            <option value="tournament">Tournament</option>
-          </select>
-        </div>
-
-        {loading ? (
-          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading multiplayer rooms from Firebase...</p>
-        ) : activeModeRooms.length === 0 ? (
-          <div style={emptyArenaStyle}>
-            <h3 style={styles.smallCardTitle}>No rooms here yet.</h3>
-            <p style={styles.smallCardText}>Create a {selectedModeMeta.label.toLowerCase()} room above to start this game mode.</p>
-          </div>
-        ) : (
-          <div style={roomGridStyle}>
-            {activeModeRooms.map((room) => (
-              <article key={room.roomId} style={roomCardStyle}>
-                <div style={styles.rowBetween}>
-                  <div>
-                    <p style={styles.eyebrow}>{room.roomCode}</p>
-                    <h3 style={styles.smallCardTitle}>{room.roomName}</h3>
-                  </div>
-
-                  <Pill tone={room.status === 'waiting' ? 'success' : 'default'}>{room.status}</Pill>
-                </div>
-
-                <p style={{ ...styles.smallCardText, marginTop: 10 }}>
-                  {modeDetails[room.mode]?.accent || '🎮'} {room.mode} mode • hosted by {room.createdByName}
-                </p>
-
-                <div style={roomFooterStyle}>
-                  <span>{room.playerCount} / {room.maxPlayers} players</span>
-                  <button type="button" onClick={() => handleOpenRoom(room.roomId)} style={secondaryButtonStyle}>
-                    Open Lobby
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {selectedRoomDetails && (
-        <div style={lobbyPanelStyle}>
-          <div style={styles.rowBetween}>
-            <div>
-              <p style={styles.eyebrow}>Opened lobby</p>
-              <h3 style={styles.smallCardTitle}>{selectedRoomDetails.room.roomName}</h3>
-              <p style={styles.smallCardText}>
-                Code <strong>{selectedRoomDetails.room.roomCode}</strong> • {selectedRoomDetails.room.mode} mode • {selectedRoomDetails.roomPlayers.length} / {selectedRoomDetails.room.maxPlayers} players
-              </p>
-            </div>
-
-            <div style={buttonRowStyle}>
-              <Pill>{roomLoading ? 'Loading' : selectedRoomDetails.room.status}</Pill>
-              <button type="button" onClick={handleCloseRoom} style={secondaryButtonStyle}>Close</button>
-            </div>
-          </div>
-
-          {selectedRoomDetails.room.mode === 'challenge' && (
-            <div style={challengeControlStyle}>
-              <label style={fieldStyle}>
-                Problem card ID
-                <input
-                  value={challengeProblemId}
-                  onChange={(event) => setChallengeProblemId(event.target.value)}
-                  placeholder="Example: problem_1 or 1"
-                  style={inputStyle}
-                />
-              </label>
-
-              <button type="button" onClick={handleStartChallenge} style={primaryButtonStyle}>
-                Start Challenge
-              </button>
-            </div>
-          )}
-
-          {selectedRoomDetails.room.mode === 'debate' && (
-            <ModeDataPanel
-              title="Debate setup"
-              description="Debate rooms are saved in multiplayerRooms and linked to debates and debateVotes. Players can join the room now while the debate prompt is prepared."
-              rows={hubData.debates.filter((debate) => debate.roomId === selectedRoomDetails.room.roomId)}
-              empty="No debate prompt has been created for this room yet."
-              render={(debate) => `${debate.prompt || 'Debate prompt'} • ${debate.status || 'open'}`}
-            />
-          )}
-
-          {selectedRoomDetails.room.mode === 'tournament' && (
-            <ModeDataPanel
-              title="Tournament setup"
-              description="Tournament rooms are saved in multiplayerRooms and linked to tournaments and tournamentPlayers."
-              rows={hubData.tournaments.filter((tournament) => tournament.roomId === selectedRoomDetails.room.roomId)}
-              empty="No tournament bracket has been created for this room yet."
-              render={(tournament) => `${tournament.title || 'Tournament'} • ${tournament.status || 'planning'} • ${tournament.roundCount || 1} round(s)`}
-            />
-          )}
-
-          <div style={styles.twoColumnGrid}>
-            <div style={styles.smallCard}>
-              <p style={styles.eyebrow}>Players in room</p>
-              {selectedRoomDetails.roomPlayers.length === 0 ? (
-                <p style={styles.smallCardText}>No players have joined yet.</p>
-              ) : (
-                <div style={playerListStyle}>
-                  {selectedRoomDetails.roomPlayers.map((player) => (
-                    <article key={player.roomPlayerId || player.firestoreId} style={playerCardStyle}>
-                      <div>
-                        <strong style={playerNameStyle}>{player.displayName}</strong>
-                        <p style={styles.smallCardText}>{player.role || 'player'} • score {player.score || 0}</p>
-                      </div>
-                      <Pill>{player.status}</Pill>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={styles.smallCard}>
-              <p style={styles.eyebrow}>Challenge results</p>
-              {challengeResults.length === 0 ? (
-                <p style={styles.smallCardText}>Results will appear after players submit challenge answers.</p>
-              ) : (
-                <div style={playerListStyle}>
-                  {challengeResults.map((result) => (
-                    <article key={result.attemptId || result.firestoreId} style={playerCardStyle}>
-                      <div>
-                        <strong style={playerNameStyle}>#{result.rank} {result.displayName}</strong>
-                        <p style={styles.smallCardText}>{result.problemTitle || 'Problem card'} • {result.totalScore || 0}/100</p>
-                      </div>
-                      <Pill>{result.totalScore || 0}</Pill>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+      {!loading && page === 'room' && !selectedRoomId && !selectedRoom && (
+        <div style={cardStyle}>
+          <h3 style={styles.smallCardTitle}>No lobby opened.</h3>
+          <p style={styles.smallCardText}>Choose a room from Home or Join first.</p>
+          <button type="button" onClick={() => setPage('home')} style={secondaryButtonStyle}>Back to Home</button>
         </div>
       )}
     </div>
   )
 }
 
+const emptyHubData = {
+  rooms: [],
+  roomPlayers: [],
+  teams: [],
+  teamSessions: [],
+  debates: [],
+  debateVotes: [],
+  tournaments: [],
+  tournamentPlayers: [],
+  attempts: [],
+  scores: [],
+  subScores: [],
+  feedback: [],
+  presence: [],
+  roomEvents: [],
+  roomRequests: []
+}
+
+function rankRows(rows) {
+  return [...rows]
+    .sort((a, b) => Number(b.totalScore || 0) - Number(a.totalScore || 0))
+    .map((item, index) => ({ ...item, rank: index + 1 }))
+}
+
+function PageTabs({ page, unreadCount, onChange, onHome }) {
+  const items = [
+    { key: 'home', label: 'Home' },
+    { key: 'create', label: 'Create Event' },
+    { key: 'join', label: 'Join / Request' },
+    { key: 'notifications', label: `Notifications ${unreadCount ? `(${unreadCount})` : ''}` },
+    { key: 'room', label: 'Opened Lobby' }
+  ]
+
+  return (
+    <div className="mpPageTabs">
+      {items.map((item) => (
+        <button key={item.key} type="button" onClick={() => item.key === 'home' ? onHome() : onChange(item.key)} className={page === item.key ? 'mpPageTab active' : 'mpPageTab'}>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function HomePage({
+  rooms,
+  allRooms,
+  connections,
+  notifications,
+  unreadCount,
+  activeMode,
+  modeFilter,
+  searchTerm,
+  modeCounts,
+  presenceByUserId,
+  joinRequestMessage,
+  onModeChange,
+  onModeFilterChange,
+  onSearchChange,
+  onCreate,
+  onJoin,
+  onOpen,
+  onRequest,
+  onSeed,
+  onJoinRequestMessageChange,
+  onNotificationAction,
+  onNotificationDecline,
+  onMarkRead,
+  connectionUserId,
+  onConnectionUserIdChange,
+  onSendConnectionRequest
+}) {
+  return (
+    <>
+      <div className="mpTwoCol">
+        <div style={cardStyle}>
+          <p style={styles.eyebrow}>Sequential workflow</p>
+          <h3 style={styles.smallCardTitle}>Start from one clear action.</h3>
+          <div className="mpActionGrid">
+            <button type="button" onClick={onCreate} style={primaryButtonStyle}>Create a live event</button>
+            <button type="button" onClick={onJoin} style={secondaryButtonStyle}>Join or request access</button>
+            <button type="button" onClick={onSeed} style={secondaryButtonStyle}>Refresh multiplayer setup</button>
+          </div>
+          <p style={styles.smallCardText}>Rooms now have created, lobby, started, ended and last activity timestamps.</p>
+        </div>
+
+        <NotificationPanel
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onAction={onNotificationAction}
+          onDecline={onNotificationDecline}
+          onMarkRead={onMarkRead}
+        />
+      </div>
+
+      <div className="mpTwoCol">
+        <ConnectionsPanel
+          connections={connections}
+          presenceByUserId={presenceByUserId}
+          connectionUserId={connectionUserId}
+          onConnectionUserIdChange={onConnectionUserIdChange}
+          onSendConnectionRequest={onSendConnectionRequest}
+        />
+
+        <div style={cardStyle}>
+          <p style={styles.eyebrow}>Live summary</p>
+          <div className="mpMiniGrid">
+            <MiniStat title="Rooms" value={allRooms.length} />
+            <MiniStat title="Challenge" value={modeCounts.challenge || 0} />
+            <MiniStat title="Team" value={modeCounts.team || 0} />
+            <MiniStat title="Debate" value={modeCounts.debate || 0} />
+            <MiniStat title="Tournament" value={modeCounts.tournament || 0} />
+          </div>
+        </div>
+      </div>
+
+      <ModeNav activeMode={activeMode} modeCounts={modeCounts} onModeChange={onModeChange} />
+
+      <div style={sectionCardStyle}>
+        <div style={styles.rowBetween}>
+          <div>
+            <p style={styles.eyebrow}>{modeDetails[activeMode]?.label} rooms</p>
+            <h3 style={styles.smallCardTitle}>{modeDetails[activeMode]?.title}</h3>
+            <p style={styles.smallCardText}>{modeDetails[activeMode]?.description}</p>
+          </div>
+          <Pill>{rooms.length} rooms</Pill>
+        </div>
+
+        <div className="mpFilterGrid">
+          <input value={searchTerm} onChange={(event) => onSearchChange(event.target.value)} placeholder="Search room name, code, host, status or quest..." style={inputStyle} />
+          <select value={modeFilter} onChange={(event) => onModeFilterChange(event.target.value)} style={inputStyle}>
+            <option value="all">All modes</option>
+            {Object.entries(modeDetails).map(([key, item]) => (
+              <option key={key} value={key}>{item.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <label style={{ ...fieldStyle, marginTop: 14 }}>
+          Optional request message
+          <input value={joinRequestMessage} onChange={(event) => onJoinRequestMessageChange(event.target.value)} placeholder="Example: Please add me to this event" style={inputStyle} />
+        </label>
+
+        {rooms.length === 0 ? (
+          <EmptyState title="No rooms found." text="Create a room or change your filters." />
+        ) : (
+          <div className="mpRoomGrid">
+            {rooms.map((room) => (
+              <RoomCard key={room.roomId} room={room} presenceByUserId={presenceByUserId} onOpen={() => onOpen(room.roomId)} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function CreateRoomPage({
+  roomName,
+  mode,
+  maxPlayers,
+  requiresApproval,
+  questTitle,
+  onRoomNameChange,
+  onModeChange,
+  onMaxPlayersChange,
+  onRequiresApprovalChange,
+  onQuestTitleChange,
+  onCreate,
+  onBack
+}) {
+  return (
+    <div style={sectionCardStyle}>
+      <WizardHeader step="Step 1 of 3" title="Create a live room event" text="Choose the game mode, set the event details and open a lobby." onBack={onBack} />
+
+      <form onSubmit={onCreate} style={formGridStyle}>
+        <div className="mpModeSelectGrid">
+          {Object.entries(modeDetails).map(([key, item]) => (
+            <button key={key} type="button" onClick={() => onModeChange(key)} className={mode === key ? 'mpModeChoice active' : 'mpModeChoice'}>
+              <span>{item.accent}</span>
+              <strong>{item.label}</strong>
+              <small>{item.description}</small>
+            </button>
+          ))}
+        </div>
+
+        <div className="mpTwoCol">
+          <label style={fieldStyle}>
+            Room name
+            <input value={roomName} onChange={(event) => onRoomNameChange(event.target.value)} placeholder="Example: GLA SDG Challenge Room" style={inputStyle} />
+          </label>
+
+          <label style={fieldStyle}>
+            Quest / event theme
+            <input value={questTitle} onChange={(event) => onQuestTitleChange(event.target.value)} placeholder="Example: Health innovation quest" style={inputStyle} />
+          </label>
+        </div>
+
+        <div className="mpTwoCol">
+          <label style={fieldStyle}>
+            Max players
+            <select value={maxPlayers} onChange={(event) => onMaxPlayersChange(event.target.value)} style={inputStyle}>
+              <option value="2">2 players</option>
+              <option value="4">4 players</option>
+              <option value="8">8 players</option>
+              <option value="12">12 players</option>
+            </select>
+          </label>
+
+          <label className="mpCheckRow">
+            <input type="checkbox" checked={requiresApproval} onChange={(event) => onRequiresApprovalChange(event.target.checked)} />
+            Require host approval before players join
+          </label>
+        </div>
+
+        <button type="submit" style={primaryButtonStyle}>Create room and open lobby</button>
+        <p style={styles.smallCardText}>This event will expire in one hour if no other player joins.</p>
+      </form>
+    </div>
+  )
+}
+
+function JoinRoomPage({ joinCode, joinRequestMessage, rooms, presenceByUserId, onJoinCodeChange, onJoinRequestMessageChange, onJoin, onRequest, onOpen, onBack }) {
+  return (
+    <div style={sectionCardStyle}>
+      <WizardHeader step="Step 1 of 2" title="Join or request access" text="Use the host room code or request access from a room card." onBack={onBack} />
+
+      <form onSubmit={onJoin} style={formGridStyle}>
+        <label style={fieldStyle}>
+          Room code
+          <input value={joinCode} onChange={(event) => onJoinCodeChange(event.target.value.toUpperCase())} placeholder="Example: ABC123" style={{ ...inputStyle, letterSpacing: '0.12em', fontWeight: 950 }} />
+        </label>
+        <button type="submit" style={primaryButtonStyle}>Join room by code</button>
+      </form>
+
+      <label style={{ ...fieldStyle, marginTop: 20 }}>
+        Request message
+        <input value={joinRequestMessage} onChange={(event) => onJoinRequestMessageChange(event.target.value)} placeholder="Example: Please approve me for the tournament" style={inputStyle} />
+      </label>
+
+      <div className="mpRoomGrid">
+        {rooms.map((room) => (
+          <RoomCard key={room.roomId} room={room} presenceByUserId={presenceByUserId} onOpen={() => onOpen(room.roomId)} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function NotificationsPage({ notifications, unreadCount, connections, presenceByUserId, connectionUserId, onConnectionUserIdChange, onSendConnectionRequest, onNotificationAction, onNotificationDecline, onMarkRead }) {
+  return (
+    <div className="mpTwoCol">
+      <NotificationPanel notifications={notifications} unreadCount={unreadCount} onAction={onNotificationAction} onDecline={onNotificationDecline} onMarkRead={onMarkRead} limit={30} />
+      <ConnectionsPanel connections={connections} presenceByUserId={presenceByUserId} connectionUserId={connectionUserId} onConnectionUserIdChange={onConnectionUserIdChange} onSendConnectionRequest={onSendConnectionRequest} />
+    </div>
+  )
+}
+
+function RoomPage(props) {
+  const {
+    roomLoading,
+    selectedRoom,
+    selectedRoomDetails,
+    selectedMode,
+    isHost,
+    currentPlayer,
+    presenceByUserId,
+    inviteUserId,
+    endReason,
+    problemCardId,
+    problemTitle,
+    selectedAiCardIds,
+    selectedAiCardTitles,
+    explanation,
+    teamName,
+    selectedTeamId,
+    debatePrompt,
+    voteCategory,
+    voteTargetUserId,
+    tournamentTitle,
+    roundCount,
+    roundNumber,
+    selectedTournament,
+    selectedDebate,
+    challengeResults,
+    debateArguments,
+    debateVoteSummary,
+    tournamentLeaderboard,
+    onInviteUserIdChange,
+    onSendInvite,
+    onEndReasonChange,
+    onEndRoom,
+    onAcceptRoomRequest,
+    onDeclineRoomRequest,
+    onProblemCardIdChange,
+    onProblemTitleChange,
+    onSelectedAiCardIdsChange,
+    onSelectedAiCardTitlesChange,
+    onExplanationChange,
+    onStartChallenge,
+    onSubmitChallenge,
+    onTeamNameChange,
+    onSelectedTeamIdChange,
+    onCreateTeam,
+    onJoinTeam,
+    onStartTeam,
+    onSubmitTeam,
+    onDebatePromptChange,
+    onSetDebatePrompt,
+    onSubmitDebateArgument,
+    onVoteCategoryChange,
+    onVoteTargetUserIdChange,
+    onVote,
+    onTournamentTitleChange,
+    onRoundCountChange,
+    onRoundNumberChange,
+    onStartTournament,
+    onSetTournamentRound,
+    onSubmitTournamentRound,
+    onFinishTournament,
+    onBack
+  } = props
+
+  return (
+    <div style={lobbyCardStyle}>
+      <div style={styles.rowBetween}>
+        <div>
+          <p style={styles.eyebrow}>{modeDetails[selectedMode]?.title}</p>
+          <h2 className="mpLobbyTitle">{modeDetails[selectedMode]?.accent} {selectedRoom.roomName}</h2>
+          <p style={styles.smallCardText}>
+            Code <strong>{selectedRoom.roomCode}</strong> • {selectedRoom.status} • {selectedRoom.roomPlayers.length}/{selectedRoom.maxPlayers} players
+          </p>
+        </div>
+        <div style={buttonRowStyle}>
+          <Pill>{roomLoading ? 'Syncing' : getRoomStatusLabel(selectedRoom)}</Pill>
+          <button type="button" onClick={onBack} style={secondaryButtonStyle}>Back to Rooms</button>
+        </div>
+      </div>
+
+      <LifecyclePanel room={selectedRoom} />
+
+      <div className="mpTwoCol">
+        <div style={cardStyle}>
+          <p style={styles.eyebrow}>Players and live status</p>
+          <PlayerList players={selectedRoomDetails.roomPlayers || []} presenceByUserId={presenceByUserId} />
+        </div>
+
+        <div style={cardStyle}>
+          <p style={styles.eyebrow}>Invites and access requests</p>
+          <form onSubmit={onSendInvite} style={formGridStyle}>
+            <label style={fieldStyle}>
+              Invite player by email or UID
+              <input value={inviteUserId} onChange={(event) => onInviteUserIdChange(event.target.value)} placeholder="Enter player email or UID" style={inputStyle} />
+            </label>
+            <button type="submit" style={primaryButtonStyle}>Send room invite</button>
+          </form>
+          <RoomRequests requests={selectedRoomDetails.roomRequests || []} isHost={isHost} onAccept={onAcceptRoomRequest} onDecline={onDeclineRoomRequest} />
+        </div>
+      </div>
+
+      {selectedMode === 'challenge' && (
+        <ChallengeModePanel
+          isHost={isHost}
+          room={selectedRoom}
+          problemCardId={problemCardId}
+          problemTitle={problemTitle}
+          selectedAiCardIds={selectedAiCardIds}
+          selectedAiCardTitles={selectedAiCardTitles}
+          explanation={explanation}
+          results={challengeResults}
+          onProblemCardIdChange={onProblemCardIdChange}
+          onProblemTitleChange={onProblemTitleChange}
+          onSelectedAiCardIdsChange={onSelectedAiCardIdsChange}
+          onSelectedAiCardTitlesChange={onSelectedAiCardTitlesChange}
+          onExplanationChange={onExplanationChange}
+          onStart={onStartChallenge}
+          onSubmit={onSubmitChallenge}
+        />
+      )}
+
+      {selectedMode === 'team' && (
+        <TeamModePanel
+          isHost={isHost}
+          currentPlayer={currentPlayer}
+          room={selectedRoom}
+          teams={selectedRoomDetails.teams || []}
+          teamSessions={selectedRoomDetails.teamSessions || []}
+          teamName={teamName}
+          selectedTeamId={selectedTeamId}
+          problemCardId={problemCardId}
+          problemTitle={problemTitle}
+          selectedAiCardIds={selectedAiCardIds}
+          selectedAiCardTitles={selectedAiCardTitles}
+          explanation={explanation}
+          onTeamNameChange={onTeamNameChange}
+          onSelectedTeamIdChange={onSelectedTeamIdChange}
+          onProblemCardIdChange={onProblemCardIdChange}
+          onProblemTitleChange={onProblemTitleChange}
+          onSelectedAiCardIdsChange={onSelectedAiCardIdsChange}
+          onSelectedAiCardTitlesChange={onSelectedAiCardTitlesChange}
+          onExplanationChange={onExplanationChange}
+          onCreateTeam={onCreateTeam}
+          onJoinTeam={onJoinTeam}
+          onStart={onStartTeam}
+          onSubmit={onSubmitTeam}
+        />
+      )}
+
+      {selectedMode === 'debate' && (
+        <DebateModePanel
+          isHost={isHost}
+          debate={selectedDebate}
+          players={selectedRoomDetails.roomPlayers || []}
+          argumentsList={debateArguments}
+          voteSummary={debateVoteSummary}
+          debatePrompt={debatePrompt}
+          selectedAiCardIds={selectedAiCardIds}
+          selectedAiCardTitles={selectedAiCardTitles}
+          explanation={explanation}
+          voteCategory={voteCategory}
+          voteTargetUserId={voteTargetUserId}
+          onDebatePromptChange={onDebatePromptChange}
+          onSelectedAiCardIdsChange={onSelectedAiCardIdsChange}
+          onSelectedAiCardTitlesChange={onSelectedAiCardTitlesChange}
+          onExplanationChange={onExplanationChange}
+          onVoteCategoryChange={onVoteCategoryChange}
+          onVoteTargetUserIdChange={onVoteTargetUserIdChange}
+          onSetPrompt={onSetDebatePrompt}
+          onSubmitArgument={onSubmitDebateArgument}
+          onVote={onVote}
+        />
+      )}
+
+      {selectedMode === 'tournament' && (
+        <TournamentModePanel
+          isHost={isHost}
+          room={selectedRoom}
+          tournament={selectedTournament}
+          leaderboard={tournamentLeaderboard}
+          tournamentTitle={tournamentTitle}
+          roundCount={roundCount}
+          roundNumber={roundNumber}
+          problemCardId={problemCardId}
+          problemTitle={problemTitle}
+          selectedAiCardIds={selectedAiCardIds}
+          selectedAiCardTitles={selectedAiCardTitles}
+          explanation={explanation}
+          onTournamentTitleChange={onTournamentTitleChange}
+          onRoundCountChange={onRoundCountChange}
+          onRoundNumberChange={onRoundNumberChange}
+          onProblemCardIdChange={onProblemCardIdChange}
+          onProblemTitleChange={onProblemTitleChange}
+          onSelectedAiCardIdsChange={onSelectedAiCardIdsChange}
+          onSelectedAiCardTitlesChange={onSelectedAiCardTitlesChange}
+          onExplanationChange={onExplanationChange}
+          onStart={onStartTournament}
+          onSetRound={onSetTournamentRound}
+          onSubmitRound={onSubmitTournamentRound}
+          onFinish={onFinishTournament}
+        />
+      )}
+
+      <EndRoomPanel isHost={isHost} room={selectedRoom} endReason={endReason} onEndReasonChange={onEndReasonChange} onEnd={onEndRoom} />
+      <RoomTimeline events={selectedRoomDetails.roomEvents || []} />
+    </div>
+  )
+}
+
+function ModeNav({ activeMode, modeCounts, onModeChange }) {
+  return (
+    <div className="mpModeNav">
+      {Object.entries(modeDetails).map(([key, item]) => (
+        <button key={key} type="button" onClick={() => onModeChange(key)} className={activeMode === key ? 'mpModeButton active' : 'mpModeButton'}>
+          <span>{item.accent}</span>
+          <strong>{item.label}</strong>
+          <small>{modeCounts[key] || 0}</small>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function LifecyclePanel({ room }) {
+  const ended = isEnded(room)
+
+  return (
+    <div style={lifecycleStyle}>
+      <div className="mpLifecycleHeader">
+        <div>
+          <p style={styles.eyebrow}>Live event lifecycle</p>
+          <h3 style={styles.smallCardTitle}>{ended ? 'This event has ended' : 'This event is still running'}</h3>
+        </div>
+        <Pill tone={ended ? 'default' : 'success'}>{getRoomStatusLabel(room)}</Pill>
+      </div>
+
+      <div className="mpTimeGrid">
+        <TimeBox label="Created" value={formatTime(room.createdAt)} />
+        <TimeBox label="Lobby opened" value={formatTime(room.lobbyOpenedAt)} />
+        <TimeBox label="Started" value={formatTime(room.startedAt)} />
+        <TimeBox label="Ended" value={formatTime(room.endedAt || room.completedAt || room.cancelledAt)} />
+        <TimeBox label="Expires" value={formatTime(room.expiresAt)} />
+        <TimeBox label="Duration" value={formatDuration(room.durationSeconds, room.startedAt, room.endedAt || room.completedAt)} />
+        <TimeBox label="Last activity" value={formatTime(room.lastActivityAt || room.updatedAt)} />
+      </div>
+
+      <div style={questBoxStyle}>
+        <strong>Current quest/problem</strong>
+        <span>{room.currentQuestTitle || room.currentProblemTitle || room.currentProblemId || 'Not selected yet'}</span>
+        <small>Workflow stage: {room.workflowStage || 'Not available'}</small>
+        {room.endReason && <small>End reason: {room.endReason}</small>}
+      </div>
+    </div>
+  )
+}
+
+function TimeBox({ label, value }) {
+  return (
+    <div className="mpTimeBox">
+      <span>{label}</span>
+      <strong>{value || 'Not yet'}</strong>
+    </div>
+  )
+}
+
+function RoomCard({ room, presenceByUserId, onOpen }) {
+  const hostPresence = presenceByUserId[room.createdBy]
+  const online = isPresenceOnline(hostPresence)
+  const ended = isEnded(room)
+
+  return (
+    <article className={ended ? 'mpRoomCard ended' : 'mpRoomCard'}>
+      <div style={styles.rowBetween}>
+        <div>
+          <p style={styles.eyebrow}>{room.roomCode}</p>
+          <h3 style={styles.smallCardTitle}>{modeDetails[room.mode]?.accent || '🎮'} {room.roomName}</h3>
+        </div>
+        <Pill tone={ended ? 'default' : room.status === 'waiting' ? 'success' : 'default'}>{getRoomStatusLabel(room)}</Pill>
+      </div>
+
+      <p style={styles.smallCardText}>{room.mode} mode • hosted by {room.createdByName}</p>
+
+      <div className="mpRoomMeta">
+        <span><LiveDot online={online} /> Host {online ? 'online' : 'offline'}</span>
+        <span>{room.playerCount} / {room.maxPlayers} players</span>
+        <span>Created {formatTime(room.createdAt)}</span>
+        <span>Started {formatTime(room.startedAt)}</span>
+        <span>Ended {formatTime(room.endedAt || room.completedAt)}</span>
+        <span>Expires {formatTime(room.expiresAt)}</span>
+      </div>
+
+      <div className="mpButtonRow">
+        <button type="button" onClick={onOpen} style={primaryButtonStyle}>Open Lobby</button>
+      </div>
+    </article>
+  )
+}
+
+function NotificationPanel({ notifications, unreadCount, onAction, onDecline, onMarkRead, limit = 6 }) {
+  return (
+    <div style={cardStyle}>
+      <div style={styles.rowBetween}>
+        <div>
+          <p style={styles.eyebrow}>Notifications</p>
+          <h3 style={styles.smallCardTitle}>Live invites and requests</h3>
+        </div>
+        <Pill>{unreadCount} unread</Pill>
+      </div>
+
+      {notifications.length === 0 ? (
+        <p style={styles.smallCardText}>No multiplayer notifications yet.</p>
+      ) : (
+        <div style={listStyle}>
+          {notifications.slice(0, limit).map((notification) => (
+            <article key={notification.notificationId} style={notification.status === 'unread' ? highlightedItemStyle : itemStyle}>
+              <div>
+                <strong style={itemTitleStyle}>{notification.title}</strong>
+                <p style={styles.smallCardText}>{notification.message}</p>
+                <small style={mutedTextStyle}>{formatTime(notification.createdAt)} • {notification.type}</small>
+              </div>
+              <div style={buttonRowStyle}>
+                {notification.actionType && <button type="button" onClick={() => onAction(notification)} style={smallButtonStyle}>Open / Accept</button>}
+                {notification.actionType && <button type="button" onClick={() => onDecline(notification)} style={smallButtonSecondaryStyle}>Decline</button>}
+                {notification.status === 'unread' && <button type="button" onClick={() => onMarkRead(notification.notificationId)} style={smallButtonSecondaryStyle}>Read</button>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConnectionsPanel({ connections, presenceByUserId, connectionUserId, onConnectionUserIdChange, onSendConnectionRequest }) {
+  return (
+    <div style={cardStyle}>
+      <p style={styles.eyebrow}>Connections</p>
+      <h3 style={styles.smallCardTitle}>Send a connection request</h3>
+      <p style={styles.smallCardText}>Enter a player's email or UID. When they accept, they will appear here as a saved connection and you can invite them into any lobby.</p>
+      <form onSubmit={onSendConnectionRequest} style={formGridStyle}>
+        <label style={fieldStyle}>
+          Player email or UID
+          <input value={connectionUserId} onChange={(event) => onConnectionUserIdChange(event.target.value)} placeholder="Enter another player's email or UID" style={inputStyle} />
+        </label>
+        <button type="submit" style={primaryButtonStyle}>Send connection request</button>
+      </form>
+
+      <div style={listStyle}>
+        {connections.length === 0 ? (
+          <p style={styles.smallCardText}>No saved connections yet.</p>
+        ) : connections.map((connection) => (
+          <div key={connection.connectionId} style={itemStyle}>
+            <div>
+              <strong style={itemTitleStyle}><LiveDot online={isPresenceOnline(presenceByUserId[connection.connectedUserId])} /> {connection.connectedDisplayName}</strong>
+              <p style={styles.smallCardText}>{connection.connectedUserId}</p>
+            </div>
+            <Pill>{connection.status}</Pill>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PlayerList({ players, presenceByUserId }) {
+  if (players.length === 0) return <p style={styles.smallCardText}>No players in the room yet.</p>
+
+  return (
+    <div style={listStyle}>
+      {players.map((player) => {
+        const presence = presenceByUserId[player.userId]
+        const online = isPresenceOnline(presence)
+        return (
+          <article key={player.roomPlayerId || player.firestoreId} style={itemStyle}>
+            <div>
+              <strong style={itemTitleStyle}><LiveDot online={online} /> {player.displayName}</strong>
+              <p style={styles.smallCardText}>{player.role || 'player'} • {player.status || 'joined'} • score {player.score || 0}</p>
+              <small style={mutedTextStyle}>Joined {formatTime(player.joinedAt)} • Last seen {formatTime(presence?.lastSeenAt || player.lastSeenAt)}</small>
+            </div>
+            <Pill>{online ? 'live' : 'offline'}</Pill>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function RoomRequests({ requests, isHost, onAccept, onDecline }) {
+  const pending = requests.filter((request) => request.status === 'pending')
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <p style={styles.eyebrow}>Pending access requests</p>
+      {pending.length === 0 ? (
+        <p style={styles.smallCardText}>No pending requests.</p>
+      ) : (
+        <div style={listStyle}>
+          {pending.map((request) => (
+            <article key={request.requestId} style={highlightedItemStyle}>
+              <div>
+                <strong style={itemTitleStyle}>{request.fromDisplayName}</strong>
+                <p style={styles.smallCardText}>{request.message || 'No message provided.'}</p>
+                <small style={mutedTextStyle}>Requested {formatTime(request.createdAt)}</small>
+              </div>
+              {isHost && (
+                <div style={buttonRowStyle}>
+                  <button type="button" onClick={() => onAccept(request.requestId)} style={smallButtonStyle}>Accept</button>
+                  <button type="button" onClick={() => onDecline(request.requestId)} style={smallButtonSecondaryStyle}>Decline</button>
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ChallengeModePanel(props) {
+  return (
+    <ModePanel title="Challenge workflow" description="Host starts the challenge, players submit individual answers, then ranked results appear live.">
+      {props.isHost && <ProblemSetupForm problemCardId={props.problemCardId} problemTitle={props.problemTitle} onProblemCardIdChange={props.onProblemCardIdChange} onProblemTitleChange={props.onProblemTitleChange} onSubmit={props.onStart} buttonText="Start Challenge" />}
+      <SubmissionForm selectedAiCardIds={props.selectedAiCardIds} selectedAiCardTitles={props.selectedAiCardTitles} explanation={props.explanation} onSelectedAiCardIdsChange={props.onSelectedAiCardIdsChange} onSelectedAiCardTitlesChange={props.onSelectedAiCardTitlesChange} onExplanationChange={props.onExplanationChange} onSubmit={props.onSubmit} buttonText="Submit Challenge Answer" />
+      <ResultsList title="Challenge results" rows={props.results} />
+    </ModePanel>
+  )
+}
+
+function TeamModePanel(props) {
+  return (
+    <ModePanel title="Team workflow" description="Create or join a team, host starts the room, then each team submits one shared solution.">
+      <div className="mpTwoCol">
+        <form onSubmit={props.onCreateTeam} style={formGridStyle}>
+          <label style={fieldStyle}>
+            Team name
+            <input value={props.teamName} onChange={(event) => props.onTeamNameChange(event.target.value)} placeholder="Example: Team Ubuntu" style={inputStyle} />
+          </label>
+          <button type="submit" style={primaryButtonStyle}>Create Team</button>
+        </form>
+        <div style={cardStyle}>
+          <p style={styles.eyebrow}>Teams</p>
+          {props.teams.length === 0 ? <p style={styles.smallCardText}>No teams yet.</p> : props.teams.map((team) => (
+            <div key={team.teamId} style={itemStyle}>
+              <strong style={itemTitleStyle}>{team.teamName}</strong>
+              <button type="button" onClick={() => props.onJoinTeam(team.teamId)} style={smallButtonStyle}>Join Team</button>
+            </div>
+          ))}
+        </div>
+      </div>
+      {props.isHost && <ProblemSetupForm problemCardId={props.problemCardId} problemTitle={props.problemTitle} onProblemCardIdChange={props.onProblemCardIdChange} onProblemTitleChange={props.onProblemTitleChange} onSubmit={props.onStart} buttonText="Start Team Room" />}
+      <SubmissionForm selectedAiCardIds={props.selectedAiCardIds} selectedAiCardTitles={props.selectedAiCardTitles} explanation={props.explanation} onSelectedAiCardIdsChange={props.onSelectedAiCardIdsChange} onSelectedAiCardTitlesChange={props.onSelectedAiCardTitlesChange} onExplanationChange={props.onExplanationChange} onSubmit={props.onSubmit} buttonText="Submit Team Solution" />
+      <ResultsList title="Team submissions" rows={props.teamSessions.map((session) => ({ ...session, displayName: session.submittedByName || session.teamId, totalScore: session.totalScore, problemTitle: session.problemTitle }))} />
+    </ModePanel>
+  )
+}
+
+function DebateModePanel(props) {
+  return (
+    <ModePanel title="Debate workflow" description="Host sets the prompt, players submit arguments, then everyone votes for the strongest categories.">
+      {props.isHost && (
+        <form onSubmit={props.onSetPrompt} style={formGridStyle}>
+          <label style={fieldStyle}>
+            Debate prompt
+            <input value={props.debatePrompt} onChange={(event) => props.onDebatePromptChange(event.target.value)} placeholder="Example: Should AI be used for rural health triage?" style={inputStyle} />
+          </label>
+          <button type="submit" style={primaryButtonStyle}>Save Debate Prompt</button>
+        </form>
+      )}
+      <div style={questBoxStyle}><strong>Prompt</strong><span>{props.debate?.prompt || 'No prompt set yet.'}</span></div>
+      <SubmissionForm selectedAiCardIds={props.selectedAiCardIds} selectedAiCardTitles={props.selectedAiCardTitles} explanation={props.explanation} onSelectedAiCardIdsChange={props.onSelectedAiCardIdsChange} onSelectedAiCardTitlesChange={props.onSelectedAiCardTitlesChange} onExplanationChange={props.onExplanationChange} onSubmit={props.onSubmitArgument} buttonText="Submit Debate Argument" />
+      <form onSubmit={props.onVote} style={formGridStyle}>
+        <div className="mpTwoCol">
+          <label style={fieldStyle}>
+            Vote category
+            <select value={props.voteCategory} onChange={(event) => props.onVoteCategoryChange(event.target.value)} style={inputStyle}>
+              {voteCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+            </select>
+          </label>
+          <label style={fieldStyle}>
+            Vote for player
+            <select value={props.voteTargetUserId} onChange={(event) => props.onVoteTargetUserIdChange(event.target.value)} style={inputStyle}>
+              <option value="">Choose player</option>
+              {props.players.map((player) => <option key={player.userId} value={player.userId}>{player.displayName}</option>)}
+            </select>
+          </label>
+        </div>
+        <button type="submit" style={primaryButtonStyle}>Submit Debate Vote</button>
+      </form>
+      <ResultsList title="Debate arguments" rows={props.argumentsList} />
+      <ResultsList title="Vote summary" rows={props.voteSummary.map((row) => ({ displayName: row.targetDisplayName, problemTitle: row.voteCategory, totalScore: row.count }))} />
+    </ModePanel>
+  )
+}
+
+function TournamentModePanel(props) {
+  return (
+    <ModePanel title="Tournament workflow" description="Start the tournament, set each round problem, players submit rounds, then finalise the leaderboard.">
+      {props.isHost && (
+        <>
+          <form onSubmit={props.onStart} style={formGridStyle}>
+            <div className="mpTwoCol">
+              <label style={fieldStyle}>
+                Tournament title
+                <input value={props.tournamentTitle} onChange={(event) => props.onTournamentTitleChange(event.target.value)} placeholder="Example: GLA Innovation Tournament" style={inputStyle} />
+              </label>
+              <label style={fieldStyle}>
+                Round count
+                <input value={props.roundCount} onChange={(event) => props.onRoundCountChange(event.target.value)} placeholder="3" style={inputStyle} />
+              </label>
+            </div>
+            <button type="submit" style={primaryButtonStyle}>Start Tournament</button>
+          </form>
+          <form onSubmit={props.onSetRound} style={formGridStyle}>
+            <div className="mpTwoCol">
+              <label style={fieldStyle}>
+                Round number
+                <input value={props.roundNumber} onChange={(event) => props.onRoundNumberChange(event.target.value)} style={inputStyle} />
+              </label>
+              <label style={fieldStyle}>
+                Problem card ID
+                <input value={props.problemCardId} onChange={(event) => props.onProblemCardIdChange(event.target.value)} style={inputStyle} />
+              </label>
+            </div>
+            <label style={fieldStyle}>
+              Problem title
+              <input value={props.problemTitle} onChange={(event) => props.onProblemTitleChange(event.target.value)} style={inputStyle} />
+            </label>
+            <button type="submit" style={primaryButtonStyle}>Set Current Round</button>
+          </form>
+        </>
+      )}
+      <SubmissionForm selectedAiCardIds={props.selectedAiCardIds} selectedAiCardTitles={props.selectedAiCardTitles} explanation={props.explanation} onSelectedAiCardIdsChange={props.onSelectedAiCardIdsChange} onSelectedAiCardTitlesChange={props.onSelectedAiCardTitlesChange} onExplanationChange={props.onExplanationChange} onSubmit={props.onSubmitRound} buttonText="Submit Tournament Round" />
+      <ResultsList title="Tournament leaderboard" rows={props.leaderboard.map((player) => ({ displayName: `#${player.rank || '-'} ${player.displayName}`, problemTitle: `${player.completedRounds || 0} rounds`, totalScore: player.totalScore }))} />
+      {props.isHost && <button type="button" onClick={props.onFinish} style={primaryButtonStyle}>Finish Tournament and Finalise Ranks</button>}
+    </ModePanel>
+  )
+}
+
+function ModePanel({ title, description, children }) {
+  return (
+    <div style={sectionCardStyle}>
+      <p style={styles.eyebrow}>Mode workflow</p>
+      <h3 style={styles.smallCardTitle}>{title}</h3>
+      <p style={styles.smallCardText}>{description}</p>
+      <div className="mpStepGrid">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ProblemSetupForm({ problemCardId, problemTitle, onProblemCardIdChange, onProblemTitleChange, onSubmit, buttonText }) {
+  return (
+    <form onSubmit={onSubmit} style={formGridStyle}>
+      <p style={styles.eyebrow}>Host setup</p>
+      <div className="mpTwoCol">
+        <label style={fieldStyle}>
+          Problem card ID
+          <input value={problemCardId} onChange={(event) => onProblemCardIdChange(event.target.value)} placeholder="Example: 1" style={inputStyle} />
+        </label>
+        <label style={fieldStyle}>
+          Problem / quest title
+          <input value={problemTitle} onChange={(event) => onProblemTitleChange(event.target.value)} placeholder="Example: Rural health access" style={inputStyle} />
+        </label>
+      </div>
+      <button type="submit" style={primaryButtonStyle}>{buttonText}</button>
+    </form>
+  )
+}
+
+function SubmissionForm({ selectedAiCardIds, selectedAiCardTitles, explanation, onSelectedAiCardIdsChange, onSelectedAiCardTitlesChange, onExplanationChange, onSubmit, buttonText }) {
+  return (
+    <form onSubmit={onSubmit} style={formGridStyle}>
+      <p style={styles.eyebrow}>Player submission</p>
+      <div className="mpTwoCol">
+        <label style={fieldStyle}>
+          Selected AI card IDs
+          <input value={selectedAiCardIds} onChange={(event) => onSelectedAiCardIdsChange(event.target.value)} placeholder="Example: 1, 3, 5" style={inputStyle} />
+        </label>
+        <label style={fieldStyle}>
+          Selected AI card titles
+          <input value={selectedAiCardTitles} onChange={(event) => onSelectedAiCardTitlesChange(event.target.value)} placeholder="Example: Chatbot, Translator" style={inputStyle} />
+        </label>
+      </div>
+      <label style={fieldStyle}>
+        Explanation / solution
+        <textarea value={explanation} onChange={(event) => onExplanationChange(event.target.value)} placeholder="Write the multiplayer answer here..." style={textAreaStyle} />
+      </label>
+      <button type="submit" style={primaryButtonStyle}>{buttonText}</button>
+    </form>
+  )
+}
+
+function ResultsList({ title, rows }) {
+  return (
+    <div style={cardStyle}>
+      <p style={styles.eyebrow}>{title}</p>
+      {rows.length === 0 ? (
+        <p style={styles.smallCardText}>Nothing submitted yet.</p>
+      ) : (
+        <div style={listStyle}>
+          {rows.map((row, index) => (
+            <article key={row.attemptId || row.teamSessionId || row.userId || `${title}_${index}`} style={itemStyle}>
+              <div>
+                <strong style={itemTitleStyle}>{row.rank ? `#${row.rank} ` : ''}{row.displayName || row.submittedByName || row.targetDisplayName || 'Player'}</strong>
+                <p style={styles.smallCardText}>{row.problemTitle || row.voteCategory || row.status || 'Submission'}</p>
+                <small style={mutedTextStyle}>Submitted {formatTime(row.submittedAt || row.createdAt || row.updatedAt)}</small>
+              </div>
+              <Pill>{row.totalScore ?? row.count ?? 0}</Pill>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EndRoomPanel({ isHost, room, endReason, onEndReasonChange, onEnd }) {
+  if (!isHost) return null
+  if (isEnded(room)) {
+    return (
+      <div style={cardStyle}>
+        <p style={styles.eyebrow}>Room ended</p>
+        <p style={styles.smallCardText}>Ended at {formatTime(room.endedAt || room.completedAt)}. Reason: {room.endReason || 'Not provided'}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={dangerCardStyle}>
+      <p style={styles.eyebrow}>End live event</p>
+      <h3 style={styles.smallCardTitle}>Close this room when the event is finished.</h3>
+      <form onSubmit={onEnd} style={formGridStyle}>
+        <label style={fieldStyle}>
+          End reason
+          <input value={endReason} onChange={(event) => onEndReasonChange(event.target.value)} placeholder="Example: Challenge completed" style={inputStyle} />
+        </label>
+        <button type="submit" style={dangerButtonStyle}>End Room</button>
+      </form>
+    </div>
+  )
+}
+
+function RoomTimeline({ events }) {
+  return (
+    <div style={sectionCardStyle}>
+      <p style={styles.eyebrow}>Live timeline</p>
+      <h3 style={styles.smallCardTitle}>Room activity log</h3>
+      {events.length === 0 ? (
+        <p style={styles.smallCardText}>No activity yet.</p>
+      ) : (
+        <div style={listStyle}>
+          {events.map((event) => (
+            <article key={event.eventId || event.firestoreId} style={itemStyle}>
+              <div>
+                <strong style={itemTitleStyle}>{event.eventType}</strong>
+                <p style={styles.smallCardText}>{event.message}</p>
+                <small style={mutedTextStyle}>{formatTime(event.createdAt)} • {event.actorDisplayName || 'System'}</small>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WizardHeader({ step, title, text, onBack }) {
+  return (
+    <div style={styles.rowBetween}>
+      <div>
+        <p style={styles.eyebrow}>{step}</p>
+        <h3 style={styles.smallCardTitle}>{title}</h3>
+        <p style={styles.smallCardText}>{text}</p>
+      </div>
+      <button type="button" onClick={onBack} style={secondaryButtonStyle}>Back</button>
+    </div>
+  )
+}
+
 function MiniStat({ title, value }) {
   return (
-    <div style={miniStatStyle}>
+    <div className="mpMiniStat">
       <strong>{value}</strong>
       <span>{title}</span>
     </div>
@@ -525,7 +1871,6 @@ function MiniStat({ title, value }) {
 
 function MessageCard({ message, tone }) {
   const isError = tone === 'error'
-
   return (
     <div style={{ ...styles.smallCard, marginTop: 18, borderColor: isError ? 'rgba(153, 27, 27, 0.28)' : 'rgba(22, 101, 52, 0.28)' }}>
       <p style={{ ...styles.smallCardText, color: isError ? '#991b1b' : '#166534' }}>{message}</p>
@@ -533,133 +1878,124 @@ function MessageCard({ message, tone }) {
   )
 }
 
-function ModeDataPanel({ title, description, rows, empty, render }) {
+function EmptyState({ title, text }) {
   return (
-    <div style={modeDataPanelStyle}>
-      <p style={styles.eyebrow}>{title}</p>
-      <p style={styles.smallCardText}>{description}</p>
-      {rows.length === 0 ? (
-        <p style={{ ...styles.smallCardText, marginTop: 10 }}>{empty}</p>
-      ) : (
-        <div style={playerListStyle}>
-          {rows.map((row) => (
-            <div key={row.firestoreId || row.debateId || row.tournamentId} style={playerCardStyle}>
-              <p style={styles.smallCardText}>{render(row)}</p>
-            </div>
-          ))}
-        </div>
-      )}
+    <div style={emptyStyle}>
+      <h3 style={styles.smallCardTitle}>{title}</h3>
+      <p style={styles.smallCardText}>{text}</p>
     </div>
   )
 }
 
-const heroStyle = {
-  padding: 28,
-  borderRadius: 32,
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr) auto',
-  gap: 22,
-  alignItems: 'center',
-  background: 'radial-gradient(circle at top left, rgba(244, 210, 138, 0.32), transparent 34%), linear-gradient(135deg, #3b2817, #6b3d16 58%, #9a6a22)',
-  boxShadow: '0 28px 70px rgba(80, 52, 20, 0.28)',
-  marginBottom: 18
+function LiveDot({ online }) {
+  return <span className={online ? 'mpLiveDot online' : 'mpLiveDot'}></span>
 }
 
-const heroTitleStyle = {
-  margin: '0 0 12px',
-  color: '#fff8eb',
-  fontSize: 'clamp(2rem, 4vw, 4rem)',
-  lineHeight: 1,
-  letterSpacing: '-0.065em'
+function isPresenceOnline(presence) {
+  if (!presence) return false
+  const millis = getMillis(presence.lastSeenAt)
+  return presence.status === 'online' && millis > 0 && Date.now() - millis < 90000
 }
 
-const heroTextStyle = {
-  margin: 0,
-  color: 'rgba(255, 248, 235, 0.84)',
-  lineHeight: 1.7,
-  maxWidth: 720
+function isRoomExpiredLocal(room) {
+  if (!room) return false
+  const status = String(room.status || '').toLowerCase()
+  if (status === 'expired') return true
+  if (['active', 'completed', 'ended', 'cancelled', 'archived'].includes(status)) return false
+
+  const expiresAt = getMillis(room.expiresAt)
+  if (expiresAt && Date.now() >= expiresAt && Number(room.playerCount || 0) <= 1) return true
+
+  const createdAt = getMillis(room.createdAt || room.lobbyOpenedAt)
+  return Boolean(createdAt && Number(room.playerCount || 0) <= 1 && Date.now() - createdAt >= 60 * 60 * 1000)
 }
 
-const heroStatStyle = {
-  minWidth: 150,
-  padding: 20,
-  borderRadius: 28,
-  textAlign: 'center',
-  background: 'rgba(255, 248, 235, 0.14)',
-  border: '1px solid rgba(255, 248, 235, 0.22)'
+function isEnded(room) {
+  const status = String(room?.status || '').toLowerCase()
+  const lifecycle = String(room?.lifecycleStatus || '').toLowerCase()
+  return isRoomExpiredLocal(room) || ['completed', 'ended', 'cancelled', 'archived', 'expired'].includes(status) || ['completed', 'ended', 'cancelled', 'expired'].includes(lifecycle) || Boolean(room?.endedAt || room?.completedAt)
 }
 
-const heroStatNumberStyle = {
-  display: 'block',
-  color: '#f4d28a',
-  fontSize: '3.1rem',
-  fontWeight: 950,
-  lineHeight: 1
+function getRoomStatusLabel(room) {
+  if (isRoomExpiredLocal(room)) return 'expired'
+  return room?.status || room?.lifecycleStatus || 'waiting'
 }
 
-const heroStatLabelStyle = {
-  display: 'block',
-  marginTop: 8,
-  color: '#fff8eb',
-  fontWeight: 850
+function getMillis(value) {
+  if (!value) return 0
+  if (typeof value.toMillis === 'function') return value.toMillis()
+  if (value.seconds) return value.seconds * 1000
+  if (value instanceof Date) return value.getTime()
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-const stickyArenaNavStyle = {
-  position: 'sticky',
-  top: 14,
-  zIndex: 20,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-  gap: 10,
-  padding: 12,
-  marginTop: 22,
-  marginBottom: 24,
-  borderRadius: 26,
-  background: 'rgba(255, 248, 235, 0.92)',
-  border: '1px solid rgba(154, 106, 34, 0.26)',
-  boxShadow: '0 18px 44px rgba(80, 52, 20, 0.16)',
-  backdropFilter: 'blur(18px)',
-  WebkitBackdropFilter: 'blur(18px)'
+function formatTime(value) {
+  const millis = getMillis(value)
+  if (!millis) return 'Not yet'
+  return new Date(millis).toLocaleString()
 }
 
-const navButtonStyle = {
-  border: '1px solid rgba(139, 92, 40, 0.18)',
-  borderRadius: 20,
-  padding: '12px 14px',
-  cursor: 'pointer',
-  background: 'rgba(255,255,255,0.66)',
-  color: '#5c3512',
-  fontWeight: 900,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8
+function formatDuration(durationSeconds, startedAt, endedAt) {
+  let seconds = Number(durationSeconds || 0)
+  if (!seconds) {
+    const started = getMillis(startedAt)
+    const ended = getMillis(endedAt)
+    if (started && ended) seconds = Math.max(0, Math.round((ended - started) / 1000))
+  }
+  if (!seconds) return 'Not available'
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainder = seconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${remainder}s`
+  return `${remainder}s`
 }
 
-const activeNavButtonStyle = {
-  ...navButtonStyle,
-  background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
-  color: '#fff8eb',
-  border: '1px solid rgba(244, 210, 138, 0.42)',
-  boxShadow: '0 12px 26px rgba(92, 53, 18, 0.22)'
-}
-
-const navIconStyle = { fontSize: '1.05rem' }
-const navCountStyle = { opacity: 0.78 }
-
-const arenaCardsStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1.25fr) minmax(300px, 0.75fr)',
-  gap: 18,
+const cardStyle = {
+  ...styles.smallCard,
   marginTop: 18
 }
 
-const actionPanelStyle = {
+const sectionCardStyle = {
   ...styles.smallCard,
-  background: 'linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,248,235,0.62))'
+  marginTop: 22
 }
 
-const formGridStyle = { display: 'grid', gap: 14, marginTop: 14 }
+const lobbyCardStyle = {
+  ...styles.smallCard,
+  marginTop: 22,
+  border: '1px solid rgba(154, 106, 34, 0.26)',
+  boxShadow: '0 22px 60px rgba(80, 52, 20, 0.12)'
+}
+
+const lifecycleStyle = {
+  ...styles.smallCard,
+  marginTop: 18,
+  background: 'linear-gradient(135deg, rgba(255,248,235,0.92), rgba(244,210,138,0.22))'
+}
+
+const questBoxStyle = {
+  marginTop: 14,
+  display: 'grid',
+  gap: 5,
+  padding: 14,
+  borderRadius: 18,
+  background: 'rgba(255,255,255,0.62)',
+  color: '#5c3512'
+}
+
+const dangerCardStyle = {
+  ...styles.smallCard,
+  marginTop: 22,
+  borderColor: 'rgba(153, 27, 27, 0.25)'
+}
+
+const formGridStyle = {
+  display: 'grid',
+  gap: 12,
+  marginTop: 14
+}
 
 const fieldStyle = {
   display: 'grid',
@@ -673,181 +2009,377 @@ const inputStyle = {
   padding: '13px 15px',
   borderRadius: 16,
   border: '1px solid rgba(139, 92, 40, 0.24)',
-  background: 'rgba(255, 255, 255, 0.78)',
+  background: 'rgba(255, 255, 255, 0.76)',
   color: '#3b2817',
   outline: 'none'
+}
+
+const textAreaStyle = {
+  ...inputStyle,
+  minHeight: 130,
+  resize: 'vertical'
 }
 
 const primaryButtonStyle = {
   border: 0,
   borderRadius: 999,
-  padding: '14px 20px',
+  padding: '13px 18px',
   cursor: 'pointer',
   background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
   color: '#fff8eb',
-  fontWeight: 900,
-  boxShadow: '0 14px 30px rgba(92, 53, 18, 0.22)'
+  fontWeight: 850
 }
 
 const secondaryButtonStyle = {
   border: '1px solid rgba(139, 92, 40, 0.22)',
   borderRadius: 999,
-  padding: '11px 15px',
+  padding: '12px 16px',
   cursor: 'pointer',
-  background: 'rgba(255,255,255,0.76)',
+  background: 'rgba(255,255,255,0.72)',
   color: '#5c3512',
   fontWeight: 850
 }
 
-const modeChoiceGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-  gap: 10
+const dangerButtonStyle = {
+  ...primaryButtonStyle,
+  background: 'linear-gradient(135deg, #991b1b, #5c1515)'
 }
 
-const modeButtonStyle = {
-  padding: 14,
-  borderRadius: 20,
-  textAlign: 'left',
-  cursor: 'pointer',
-  border: '1px solid rgba(139, 92, 40, 0.16)',
-  background: 'rgba(255,255,255,0.66)',
-  color: '#5c3512',
-  display: 'grid',
-  gap: 6
+const smallButtonStyle = {
+  ...primaryButtonStyle,
+  padding: '8px 12px',
+  fontSize: '0.8rem'
 }
 
-const selectedModeButtonStyle = {
-  ...modeButtonStyle,
-  border: '2px solid rgba(154, 106, 34, 0.68)',
-  background: 'linear-gradient(135deg, rgba(255,248,235,0.98), rgba(244,210,138,0.48))',
-  boxShadow: '0 14px 30px rgba(80, 52, 20, 0.14)'
-}
-
-const modeIconStyle = { fontSize: '1.35rem' }
-
-const databaseStripStyle = {
-  marginTop: 18,
-  padding: 16,
-  borderRadius: 22,
-  background: 'rgba(154, 106, 34, 0.1)',
-  border: '1px solid rgba(154, 106, 34, 0.18)'
-}
-
-const databaseGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: 10
-}
-
-const miniStatStyle = {
-  padding: 12,
-  borderRadius: 18,
-  background: 'rgba(255,255,255,0.62)',
-  display: 'grid',
-  gap: 3,
-  color: '#5c3512'
-}
-
-const sectionCardStyle = {
-  ...styles.smallCard,
-  marginTop: 18,
-  background: 'linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,248,235,0.56))'
-}
-
-const filterGridStyle = {
-  marginTop: 16,
-  display: 'grid',
-  gridTemplateColumns: 'minmax(240px, 1fr) 220px',
-  gap: 12
-}
-
-const emptyArenaStyle = {
-  marginTop: 18,
-  padding: 22,
-  borderRadius: 24,
-  textAlign: 'center',
-  background: 'rgba(255,255,255,0.56)',
-  border: '1px dashed rgba(139, 92, 40, 0.28)'
-}
-
-const roomGridStyle = {
-  marginTop: 18,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-  gap: 16
-}
-
-const roomCardStyle = {
-  padding: 18,
-  borderRadius: 26,
-  background: 'linear-gradient(135deg, rgba(255,255,255,0.78), rgba(255,248,235,0.6))',
-  border: '1px solid rgba(139, 92, 40, 0.16)',
-  boxShadow: '0 16px 36px rgba(80, 52, 20, 0.1)'
-}
-
-const roomFooterStyle = {
-  marginTop: 14,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-  flexWrap: 'wrap',
-  color: '#5c3512',
-  fontWeight: 850
-}
-
-const lobbyPanelStyle = {
-  marginTop: 18,
-  padding: 22,
-  borderRadius: 30,
-  background: 'linear-gradient(135deg, rgba(255, 248, 235, 0.96), rgba(244, 210, 138, 0.32))',
-  border: '1px solid rgba(154, 106, 34, 0.28)',
-  boxShadow: '0 22px 52px rgba(80, 52, 20, 0.16)'
+const smallButtonSecondaryStyle = {
+  ...secondaryButtonStyle,
+  padding: '8px 12px',
+  fontSize: '0.8rem'
 }
 
 const buttonRowStyle = {
   display: 'flex',
-  gap: 10,
+  gap: 8,
   alignItems: 'center',
   flexWrap: 'wrap'
 }
 
-const challengeControlStyle = {
-  marginTop: 18,
-  display: 'grid',
-  gridTemplateColumns: 'minmax(240px, 1fr) auto',
-  gap: 12,
-  alignItems: 'end'
-}
-
-const modeDataPanelStyle = {
-  ...styles.smallCard,
-  marginTop: 18,
-  background: 'rgba(255,255,255,0.62)'
-}
-
-const playerListStyle = {
+const listStyle = {
   display: 'grid',
   gap: 10,
-  marginTop: 12
+  marginTop: 14
 }
 
-const playerCardStyle = {
+const itemStyle = {
   padding: 14,
-  borderRadius: 20,
-  background: 'rgba(255,255,255,0.66)',
+  borderRadius: 18,
   border: '1px solid rgba(139, 92, 40, 0.14)',
+  background: 'rgba(255,255,255,0.62)',
   display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
   gap: 12,
-  flexWrap: 'wrap'
+  justifyContent: 'space-between',
+  alignItems: 'flex-start'
 }
 
-const playerNameStyle = {
-  color: '#5c3512',
-  fontSize: '1rem'
+const highlightedItemStyle = {
+  ...itemStyle,
+  background: 'rgba(244, 210, 138, 0.26)',
+  border: '1px solid rgba(154, 106, 34, 0.24)'
 }
+
+const itemTitleStyle = {
+  color: '#3b2817',
+  fontWeight: 900
+}
+
+const mutedTextStyle = {
+  display: 'block',
+  color: '#7c5d3b',
+  marginTop: 4
+}
+
+const emptyStyle = {
+  marginTop: 18,
+  padding: 24,
+  borderRadius: 22,
+  background: 'rgba(255,255,255,0.52)',
+  textAlign: 'center'
+}
+
+const pageCss = `
+.mpHero {
+  padding: 28px;
+  border-radius: 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: center;
+  background: radial-gradient(circle at top left, rgba(244, 210, 138, 0.32), transparent 34%), linear-gradient(135deg, #3b2817, #6b3d16 58%, #9a6a22);
+  box-shadow: 0 28px 70px rgba(80, 52, 20, 0.28);
+  margin-bottom: 18px;
+}
+.mpHeroTitle {
+  margin: 0 0 12px;
+  color: #fff8eb;
+  font-size: clamp(2rem, 4vw, 4rem);
+  line-height: 1;
+  letter-spacing: -0.065em;
+}
+.mpHeroText {
+  margin: 0;
+  color: rgba(255, 248, 235, 0.84);
+  line-height: 1.7;
+  max-width: 760px;
+}
+.mpHeroStatsWrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 12px;
+}
+.mpHeroStats {
+  position: relative;
+  min-width: 130px;
+  padding: 20px;
+  border-radius: 28px;
+  text-align: center;
+  background: rgba(255, 248, 235, 0.14);
+  border: 1px solid rgba(255, 248, 235, 0.22);
+  color: #fff8eb;
+  overflow: hidden;
+}
+.mpHeroStats.live {
+  background: rgba(34, 197, 94, 0.13);
+  border-color: rgba(187, 247, 208, 0.35);
+}
+.mpHeroStats strong {
+  display: block;
+  color: #f4d28a;
+  font-size: 3rem;
+  font-weight: 950;
+  line-height: 1;
+}
+.mpHeroStats.live strong {
+  color: #bbf7d0;
+}
+.mpLivePulse {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.65);
+  animation: mpPulse 1.4s infinite;
+}
+@keyframes mpPulse {
+  0% { transform: scale(.9); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.65); }
+  70% { transform: scale(1.18); box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+  100% { transform: scale(.9); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+.mpPageTabs,
+.mpModeNav {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  margin: 18px 0;
+  border-radius: 26px;
+  background: rgba(255, 248, 235, 0.94);
+  border: 1px solid rgba(154, 106, 34, 0.24);
+  box-shadow: 0 18px 44px rgba(80, 52, 20, 0.16);
+  backdrop-filter: blur(18px);
+}
+.mpPageTab,
+.mpModeButton,
+.mpModeChoice {
+  border: 1px solid rgba(139, 92, 40, 0.18);
+  border-radius: 20px;
+  padding: 12px 14px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.66);
+  color: #5c3512;
+  font-weight: 900;
+}
+.mpModeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.mpPageTab.active,
+.mpModeButton.active,
+.mpModeChoice.active {
+  background: linear-gradient(135deg, #9a6a22, #5c3512);
+  color: #fff8eb;
+  border-color: rgba(244, 210, 138, 0.42);
+  box-shadow: 0 12px 28px rgba(92, 53, 18, 0.18);
+}
+.mpTwoCol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.mpActionGrid,
+.mpStepGrid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.mpModeSelectGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.mpModeChoice {
+  min-height: 150px;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+.mpModeChoice span {
+  font-size: 1.7rem;
+}
+.mpModeChoice small {
+  line-height: 1.45;
+  opacity: .86;
+}
+.mpFilterGrid,
+.mpTimeGrid,
+.mpMiniGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.mpRoomGrid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.mpRoomCard {
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255,255,255,0.66);
+  border: 1px solid rgba(139, 92, 40, 0.16);
+  box-shadow: 0 16px 36px rgba(80, 52, 20, 0.08);
+}
+.mpRoomCard.ended {
+  opacity: .78;
+  background: rgba(255,255,255,0.44);
+}
+.mpRoomMeta {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: #6b4b2b;
+  font-size: .88rem;
+}
+.mpButtonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.mpLiveDot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: #9ca3af;
+}
+.mpLiveDot.online {
+  background: #22c55e;
+  box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.14), 0 0 16px rgba(34, 197, 94, 0.75);
+  animation: mpDotPulse 1.4s infinite;
+}
+@keyframes mpDotPulse {
+  0% { transform: scale(.9); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(.9); }
+}
+.mpLifecycleHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.mpTimeBox,
+.mpMiniStat {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.66);
+  border: 1px solid rgba(139,92,40,0.12);
+  display: grid;
+  gap: 5px;
+}
+.mpTimeBox span,
+.mpMiniStat span {
+  color: #7c5d3b;
+  font-size: .78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.mpTimeBox strong,
+.mpMiniStat strong {
+  color: #3b2817;
+}
+.mpCheckRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.62);
+  color: #5c3512;
+  font-weight: 850;
+}
+.mpLobbyTitle {
+  margin: 0 0 8px;
+  color: #3b2817;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+}
+@media (max-width: 850px) {
+  .mpHero,
+  .mpTwoCol,
+  .mpModeSelectGrid {
+    grid-template-columns: 1fr;
+  }
+  .mpHeroStatsWrap {
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
+  }
+  .mpPageTabs,
+  .mpModeNav {
+    position: static;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .mpPageTabs,
+  .mpModeNav,
+  .mpHeroStatsWrap,
+  .mpRoomGrid,
+  .mpFilterGrid,
+  .mpTimeGrid,
+  .mpMiniGrid {
+    grid-template-columns: 1fr;
+  }
+  .mpHero {
+    padding: 20px;
+    border-radius: 24px;
+  }
+  .mpHeroTitle {
+    font-size: 2rem;
+  }
+}
+`
 
 export default MultiplayerHubScreen

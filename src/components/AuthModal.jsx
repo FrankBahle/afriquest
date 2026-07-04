@@ -1,20 +1,51 @@
 import { useState } from 'react'
+import { sendPasswordResetEmail } from 'firebase/auth'
 import { useAuth } from '../context/AuthContext'
+import { auth } from '../firebase'
 
-function AuthModal({ onClose, initialMode = 'login' }) {  const { login, register } = useAuth()
+function AuthModal({ onClose, initialMode = 'login' }) {
+  const { login, register } = useAuth()
 
-  const [isRegistering, setIsRegistering] = useState(initialMode === 'register') ;
-   const [firstName, setFirstName] = useState('')
+  const [isRegistering, setIsRegistering] = useState(initialMode === 'register')
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
+  const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  function getAuthErrorMessage(errorCode) {
+    if (
+      errorCode === 'auth/invalid-credential' ||
+      errorCode === 'auth/user-not-found' ||
+      errorCode === 'auth/wrong-password' ||
+      errorCode === 'auth/invalid-email'
+    ) {
+      return 'Incorrect email or password. Please check your details and try again.'
+    }
+
+    if (errorCode === 'auth/email-already-in-use') {
+      return 'This email is already registered. Please log in or use Forgot Password.'
+    }
+
+    if (errorCode === 'auth/weak-password') {
+      return 'Password should be at least 6 characters.'
+    }
+
+    if (errorCode === 'auth/network-request-failed') {
+      return 'Network error. Please check your internet connection and try again.'
+    }
+
+    return 'Authentication failed. Please check your details and try again.'
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
+    setMessage('')
     setLoading(true)
 
     try {
@@ -26,11 +57,53 @@ function AuthModal({ onClose, initialMode = 'login' }) {  const { login, registe
 
       onClose()
     } catch (err) {
-      setError('Authentication failed. Please check your details and try again.')
+      setError(getAuthErrorMessage(err.code))
     } finally {
       setLoading(false)
     }
   }
+
+  async function handlePasswordReset(event) {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+
+    if (!email.trim()) {
+      setError('Please enter your email address first.')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim())
+      setMessage('Password reset email sent. Please check your inbox or spam folder.')
+      setIsResettingPassword(false)
+      setIsRegistering(false)
+    } catch (err) {
+      if (err.code === 'auth/user-not-found') {
+        setError('No account was found with this email address.')
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.')
+      } else {
+        setError('Could not send password reset email. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const title = isResettingPassword
+    ? 'Reset password'
+    : isRegistering
+      ? 'Create account'
+      : 'Welcome back'
+
+  const description = isResettingPassword
+    ? 'Enter your email address and we will send you a secure password reset link.'
+    : isRegistering
+      ? 'Register to start playing the AfriQuest challenge demo.'
+      : 'Log in to continue your AfriQuest challenge journey.'
 
   return (
     <div
@@ -93,7 +166,7 @@ function AuthModal({ onClose, initialMode = 'login' }) {  const { login, registe
             letterSpacing: '-0.05em'
           }}
         >
-          {isRegistering ? 'Create account' : 'Welcome back'}
+          {title}
         </h2>
 
         <p
@@ -103,118 +176,147 @@ function AuthModal({ onClose, initialMode = 'login' }) {  const { login, registe
             lineHeight: '1.6'
           }}
         >
-          {isRegistering
-            ? 'Register to start playing the AfriQuest challenge demo.'
-            : 'Log in to continue your AfriQuest challenge journey.'}
+          {description}
         </p>
 
-        <form onSubmit={handleSubmit}>
-          {isRegistering && (
-            <>
-              <input
-                type="text"
-                placeholder="First name"
-                value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-                required
-                style={inputStyle}
-              />
+        {isResettingPassword ? (
+          <form onSubmit={handlePasswordReset}>
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              style={inputStyle}
+            />
 
-              <input
-                type="text"
-                placeholder="Surname"
-                value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-                required
-                style={inputStyle}
-              />
+            {error && <AlertMessage message={error} tone="error" />}
+            {message && <AlertMessage message={message} tone="success" />}
 
-              <input
-                type="tel"
-                placeholder="Phone number"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                required
-                style={inputStyle}
-              />
-            </>
-          )}
-
-          <input
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            style={inputStyle}
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            style={inputStyle}
-          />
-
-          {error && (
-            <p
-              style={{
-                margin: '0 0 14px',
-                color: '#9f1d1d',
-                fontSize: '0.9rem',
-                lineHeight: '1.5'
-              }}
+            <button
+              type="submit"
+              disabled={loading}
+              style={submitButtonStyle(loading)}
             >
-              {error}
-            </p>
-          )}
+              {loading ? 'Sending...' : 'Send reset email'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            {isRegistering && (
+              <>
+                <input
+                  type="text"
+                  placeholder="First name"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value)}
+                  required
+                  style={inputStyle}
+                />
 
+                <input
+                  type="text"
+                  placeholder="Surname"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value)}
+                  required
+                  style={inputStyle}
+                />
+
+                <input
+                  type="tel"
+                  placeholder="Phone number"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  required
+                  style={inputStyle}
+                />
+              </>
+            )}
+
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              style={inputStyle}
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              style={inputStyle}
+            />
+
+            {error && <AlertMessage message={error} tone="error" />}
+            {message && <AlertMessage message={message} tone="success" />}
+
+            <button
+              type="submit"
+              disabled={loading}
+              style={submitButtonStyle(loading)}
+            >
+              {loading
+                ? 'Please wait...'
+                : isRegistering
+                  ? 'Create Account'
+                  : 'Login'}
+            </button>
+          </form>
+        )}
+
+        {!isRegistering && !isResettingPassword && (
           <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '14px 18px',
-              borderRadius: '999px',
-              border: '0',
-              cursor: 'pointer',
-              background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
-              color: '#fff8eb',
-              fontWeight: '850',
-              opacity: loading ? 0.7 : 1
+            onClick={() => {
+              setError('')
+              setMessage('')
+              setIsResettingPassword(true)
             }}
+            style={linkButtonStyle}
           >
-            {loading
-              ? 'Please wait...'
-              : isRegistering
-                ? 'Create Account'
-                : 'Login'}
+            Forgot password?
           </button>
-        </form>
+        )}
 
         <button
           onClick={() => {
             setError('')
+            setMessage('')
+            setIsResettingPassword(false)
             setIsRegistering(!isRegistering)
           }}
-          style={{
-            width: '100%',
-            marginTop: '16px',
-            border: '0',
-            background: 'transparent',
-            color: '#5c3512',
-            fontWeight: '750',
-            cursor: 'pointer'
-          }}
+          style={linkButtonStyle}
         >
           {isRegistering
             ? 'Already have an account? Login'
-            : 'No account yet? Register'}
+            : isResettingPassword
+              ? 'Back to login'
+              : 'No account yet? Register'}
         </button>
       </div>
     </div>
+  )
+}
+
+function AlertMessage({ message, tone }) {
+  const isError = tone === 'error'
+
+  return (
+    <p
+      style={{
+        margin: '0 0 14px',
+        color: isError ? '#9f1d1d' : '#166534',
+        fontSize: '0.9rem',
+        lineHeight: '1.5',
+        fontWeight: 750
+      }}
+    >
+      {message}
+    </p>
   )
 }
 
@@ -227,6 +329,30 @@ const inputStyle = {
   background: 'rgba(255, 255, 255, 0.75)',
   color: '#3b2817',
   outline: 'none'
+}
+
+function submitButtonStyle(loading) {
+  return {
+    width: '100%',
+    padding: '14px 18px',
+    borderRadius: '999px',
+    border: '0',
+    cursor: loading ? 'not-allowed' : 'pointer',
+    background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
+    color: '#fff8eb',
+    fontWeight: '850',
+    opacity: loading ? 0.7 : 1
+  }
+}
+
+const linkButtonStyle = {
+  width: '100%',
+  marginTop: '16px',
+  border: '0',
+  background: 'transparent',
+  color: '#5c3512',
+  fontWeight: '750',
+  cursor: 'pointer'
 }
 
 export default AuthModal

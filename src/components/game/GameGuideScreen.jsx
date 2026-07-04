@@ -16,7 +16,7 @@ function GameGuideScreen({ firstName, onChooseProblems }) {
       <div style={stickyHeroActionStyle}>
         <div>
           <p style={styles.eyebrow}>Ready to start</p>
-          <h2 style={stickyHeroTitleStyle}>AfriQuest journey guide</h2>
+          <h2 style={stickyHeroTitleStyle}>Journey guide</h2>
           <p style={stickyHeroTextStyle}>Read the steps, then start choosing your SDG problem cards.</p>
         </div>
 
@@ -31,8 +31,8 @@ function GameGuideScreen({ firstName, onChooseProblems }) {
         <div>
           <p style={styles.eyebrow}>Mission</p>
           <h3 style={heroStripTitleStyle}>Solve SDG challenges like a real innovation game.</h3>
-          <p style={styles.smallCardText}>
-            AfriQuest is built around progress. Every card you complete updates your dashboard, GLA coin, level, achievements and certificate journey.
+          <p >
+            This is built around progress. Every card you complete updates your dashboard, GLA coin, level, achievements and certificate journey.
           </p>
         </div>
         <div style={scorePreviewStyle}>
