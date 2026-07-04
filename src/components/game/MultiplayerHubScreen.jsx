@@ -3,6 +3,8 @@ import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
 import { Pill, SectionHeader } from './ui'
 import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
+import problemCardData from '../../assets/json/grit_lab_africa_problem_cards.json'
+import aiCards from '../../data/aiCards'
 import {
   acceptConnectionRequest,
   acceptRoomInvite,
@@ -71,6 +73,10 @@ const voteCategories = [
   { value: 'most_ethical', label: 'Most ethical' },
   { value: 'most_scalable_african_solution', label: 'Most scalable African solution' }
 ]
+
+const problemCards = Array.isArray(problemCardData?.cards) ? problemCardData.cards : []
+const MAX_AI_CARDS_PER_SUBMISSION = 3
+const MAX_EXPLANATION_WORDS = 100
 
 function MultiplayerHubScreen({ fullName = 'Player' }) {
   const { currentUser } = useAuth()
@@ -380,23 +386,68 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     }
   }
 
+  async function sendInviteToRecipient(recipientUserId) {
+    if (!recipientUserId) throw new Error('Choose or enter a player to invite.')
+
+    await createRoomInvite({
+      roomId: selectedRoomId,
+      recipientUserId,
+      senderUserId: userId,
+      senderDisplayName: displayName
+    })
+  }
+
   async function handleSendInvite(event) {
     event.preventDefault()
     setError('')
     setStatusMessage('')
 
     try {
-      await createRoomInvite({
-        roomId: selectedRoomId,
-        recipientUserId: inviteUserId,
-        senderUserId: userId,
-        senderDisplayName: displayName
-      })
-
+      await sendInviteToRecipient(inviteUserId)
       setInviteUserId('')
-      setStatusMessage('Invite notification sent.')
+      setStatusMessage('Invite sent. The player will see it in their notifications.')
     } catch (err) {
       handleError(err, 'Could not send invite.')
+    }
+  }
+
+  async function handleSendInviteTo(recipientUserId) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await sendInviteToRecipient(recipientUserId)
+      setStatusMessage('Invite sent. The player will see it in their notifications.')
+    } catch (err) {
+      handleError(err, 'Could not send invite.')
+    }
+  }
+
+  async function handleRoomCardAction(room) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const isMember = (room.roomPlayers || []).some((player) => player.userId === userId)
+      const isHostRoom = room.createdBy === userId
+
+      if (isMember || isHostRoom) {
+        openRoom(room.roomId)
+        return
+      }
+
+      if (room.requiresApproval) {
+        await requestToJoinRoom({ roomId: room.roomId, userId, displayName, message: joinRequestMessage })
+        setJoinRequestMessage('')
+        setStatusMessage('Access request sent to the host. When accepted, you will receive a notification.')
+        return
+      }
+
+      const roomId = await joinMultiplayerRoom({ userId, displayName, roomCode: room.roomCode })
+      openRoom(roomId)
+      setStatusMessage('Room joined successfully. You are now in the lobby.')
+    } catch (err) {
+      handleError(err, 'Could not open or join this room.')
     }
   }
 
@@ -767,6 +818,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           searchTerm={searchTerm}
           modeCounts={modeCounts}
           presenceByUserId={presenceByUserId}
+          userId={userId}
           joinRequestMessage={joinRequestMessage}
           onModeChange={(nextMode) => {
             setActiveMode(nextMode)
@@ -779,6 +831,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           onJoin={() => setPage('join')}
           onOpen={openRoom}
           onRequest={handleRequestJoinRoom}
+          onRoomAction={handleRoomCardAction}
           onSeed={handleSeedCollections}
           onJoinRequestMessageChange={setJoinRequestMessage}
           onNotificationAction={handleNotificationAction}
@@ -813,11 +866,13 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           joinRequestMessage={joinRequestMessage}
           rooms={rooms}
           presenceByUserId={presenceByUserId}
+          userId={userId}
           onJoinCodeChange={setJoinCode}
           onJoinRequestMessageChange={setJoinRequestMessage}
           onJoin={handleJoinRoom}
           onRequest={handleRequestJoinRoom}
           onOpen={openRoom}
+          onRoomAction={handleRoomCardAction}
           onBack={() => setPage('home')}
         />
       )}
@@ -846,6 +901,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           isHost={isHost}
           currentPlayer={currentPlayer}
           presenceByUserId={presenceByUserId}
+          connections={connections}
           inviteUserId={inviteUserId}
           endReason={endReason}
           problemCardId={problemCardId}
@@ -869,6 +925,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           tournamentLeaderboard={tournamentLeaderboard}
           onInviteUserIdChange={setInviteUserId}
           onSendInvite={handleSendInvite}
+          onSendInviteTo={handleSendInviteTo}
           onEndReasonChange={setEndReason}
           onEndRoom={handleEndRoom}
           onAcceptRoomRequest={handleAcceptRoomRequest}
@@ -976,6 +1033,7 @@ function HomePage({
   searchTerm,
   modeCounts,
   presenceByUserId,
+  userId,
   joinRequestMessage,
   onModeChange,
   onModeFilterChange,
@@ -984,6 +1042,7 @@ function HomePage({
   onJoin,
   onOpen,
   onRequest,
+  onRoomAction,
   onSeed,
   onJoinRequestMessageChange,
   onNotificationAction,
@@ -1069,7 +1128,7 @@ function HomePage({
         ) : (
           <div className="mpRoomGrid">
             {rooms.map((room) => (
-              <RoomCard key={room.roomId} room={room} presenceByUserId={presenceByUserId} onOpen={() => onOpen(room.roomId)} />
+              <RoomCard key={room.roomId} room={room} userId={userId} presenceByUserId={presenceByUserId} onOpen={() => onOpen(room.roomId)} onRoomAction={() => onRoomAction(room)} />
             ))}
           </div>
         )}
@@ -1143,7 +1202,7 @@ function CreateRoomPage({
   )
 }
 
-function JoinRoomPage({ joinCode, joinRequestMessage, rooms, presenceByUserId, onJoinCodeChange, onJoinRequestMessageChange, onJoin, onRequest, onOpen, onBack }) {
+function JoinRoomPage({ joinCode, joinRequestMessage, rooms, presenceByUserId, userId, onJoinCodeChange, onJoinRequestMessageChange, onJoin, onRequest, onOpen, onRoomAction, onBack }) {
   return (
     <div style={sectionCardStyle}>
       <WizardHeader step="Step 1 of 2" title="Join or request access" text="Use the host room code or request access from a room card." onBack={onBack} />
@@ -1163,7 +1222,7 @@ function JoinRoomPage({ joinCode, joinRequestMessage, rooms, presenceByUserId, o
 
       <div className="mpRoomGrid">
         {rooms.map((room) => (
-          <RoomCard key={room.roomId} room={room} presenceByUserId={presenceByUserId} onOpen={() => onOpen(room.roomId)} />
+          <RoomCard key={room.roomId} room={room} userId={userId} presenceByUserId={presenceByUserId} onOpen={() => onOpen(room.roomId)} onRoomAction={() => onRoomAction(room)} />
         ))}
       </div>
     </div>
@@ -1188,6 +1247,7 @@ function RoomPage(props) {
     isHost,
     currentPlayer,
     presenceByUserId,
+    connections = [],
     inviteUserId,
     endReason,
     problemCardId,
@@ -1211,6 +1271,7 @@ function RoomPage(props) {
     tournamentLeaderboard,
     onInviteUserIdChange,
     onSendInvite,
+    onSendInviteTo,
     onEndReasonChange,
     onEndRoom,
     onAcceptRoomRequest,
@@ -1277,6 +1338,7 @@ function RoomPage(props) {
             </label>
             <button type="submit" style={primaryButtonStyle}>Send room invite</button>
           </form>
+          <InviteConnections connections={connections} roomPlayers={selectedRoomDetails.roomPlayers || []} onInvite={onSendInviteTo} />
           <RoomRequests requests={selectedRoomDetails.roomRequests || []} isHost={isHost} onAccept={onAcceptRoomRequest} onDecline={onDeclineRoomRequest} />
         </div>
       </div>
@@ -1445,10 +1507,19 @@ function TimeBox({ label, value }) {
   )
 }
 
-function RoomCard({ room, presenceByUserId, onOpen }) {
+function RoomCard({ room, userId, presenceByUserId, onOpen, onRoomAction }) {
   const hostPresence = presenceByUserId[room.createdBy]
   const online = isPresenceOnline(hostPresence)
   const ended = isEnded(room)
+  const isMember = (room.roomPlayers || []).some((player) => player.userId === userId)
+  const isHost = room.createdBy === userId
+  const actionLabel = ended
+    ? 'View Results'
+    : isMember || isHost
+      ? 'Open Lobby'
+      : room.requiresApproval
+        ? 'Request Access'
+        : 'Join Room'
 
   return (
     <article className={ended ? 'mpRoomCard ended' : 'mpRoomCard'}>
@@ -1460,19 +1531,20 @@ function RoomCard({ room, presenceByUserId, onOpen }) {
         <Pill tone={ended ? 'default' : room.status === 'waiting' ? 'success' : 'default'}>{getRoomStatusLabel(room)}</Pill>
       </div>
 
-      <p style={styles.smallCardText}>{room.mode} mode • hosted by {room.createdByName}</p>
+      <p style={styles.smallCardText}>{modeDetails[room.mode]?.label || room.mode} mode • hosted by {room.createdByName}</p>
 
       <div className="mpRoomMeta">
         <span><LiveDot online={online} /> Host {online ? 'online' : 'offline'}</span>
         <span>{room.playerCount} / {room.maxPlayers} players</span>
+        <span>{room.requiresApproval ? 'Host approval required' : 'Open join'}</span>
         <span>Created {formatTime(room.createdAt)}</span>
         <span>Started {formatTime(room.startedAt)}</span>
         <span>Ended {formatTime(room.endedAt || room.completedAt)}</span>
-        <span>Expires {formatTime(room.expiresAt)}</span>
       </div>
 
       <div className="mpButtonRow">
-        <button type="button" onClick={onOpen} style={primaryButtonStyle}>Open Lobby</button>
+        <button type="button" onClick={onRoomAction || onOpen} style={primaryButtonStyle}>{actionLabel}</button>
+        <button type="button" onClick={onOpen} style={secondaryButtonStyle}>Preview</button>
       </div>
     </article>
   )
@@ -1538,6 +1610,32 @@ function ConnectionsPanel({ connections, presenceByUserId, connectionUserId, onC
             </div>
             <Pill>{connection.status}</Pill>
           </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function InviteConnections({ connections, roomPlayers, onInvite }) {
+  const joinedIds = new Set((roomPlayers || []).map((player) => player.userId))
+  const inviteOptions = (connections || []).filter((connection) => connection.status === 'connected' && !joinedIds.has(connection.connectedUserId))
+
+  if (inviteOptions.length === 0) {
+    return <p style={{ ...styles.smallCardText, marginTop: 12 }}>No saved connections available to invite. You can still invite by email or player ID above.</p>
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <p style={styles.eyebrow}>Quick invite saved connections</p>
+      <div style={listStyle}>
+        {inviteOptions.map((connection) => (
+          <article key={connection.connectionId} style={itemStyle}>
+            <div>
+              <strong style={itemTitleStyle}>{connection.connectedDisplayName || 'Player'}</strong>
+              <p style={styles.smallCardText}>{connection.connectedUserId}</p>
+            </div>
+            <button type="button" onClick={() => onInvite(connection.connectedUserId)} style={smallButtonStyle}>Invite</button>
+          </article>
         ))}
       </div>
     </div>
@@ -1732,13 +1830,25 @@ function ModePanel({ title, description, children }) {
 }
 
 function ProblemSetupForm({ problemCardId, problemTitle, onProblemCardIdChange, onProblemTitleChange, onSubmit, buttonText }) {
+  function handleProblemChange(event) {
+    const nextId = event.target.value
+    const card = problemCards.find((item) => String(item.id) === String(nextId))
+    onProblemCardIdChange(nextId)
+    onProblemTitleChange(card?.title || '')
+  }
+
   return (
     <form onSubmit={onSubmit} style={formGridStyle}>
       <p style={styles.eyebrow}>Host setup</p>
       <div className="mpTwoCol">
         <label style={fieldStyle}>
-          Problem card ID
-          <input value={problemCardId} onChange={(event) => onProblemCardIdChange(event.target.value)} placeholder="Example: 1" style={inputStyle} />
+          Choose problem card
+          <select value={problemCardId} onChange={handleProblemChange} style={inputStyle}>
+            <option value="">Choose a problem for the room</option>
+            {problemCards.map((card) => (
+              <option key={card.id} value={card.id}>{card.title}</option>
+            ))}
+          </select>
         </label>
         <label style={fieldStyle}>
           Problem / quest title
@@ -1751,24 +1861,69 @@ function ProblemSetupForm({ problemCardId, problemTitle, onProblemCardIdChange, 
 }
 
 function SubmissionForm({ selectedAiCardIds, selectedAiCardTitles, explanation, onSelectedAiCardIdsChange, onSelectedAiCardTitlesChange, onExplanationChange, onSubmit, buttonText }) {
+  const selectedIds = selectedAiCardIds
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const selectedSet = new Set(selectedIds.map(String))
+  const wordCount = countWords(explanation)
+  const wordLimitExceeded = wordCount > MAX_EXPLANATION_WORDS
+
+  function updateSelectedCards(nextIds) {
+    const nextCards = aiCards.filter((card) => nextIds.includes(String(card.id)))
+    onSelectedAiCardIdsChange(nextIds.join(', '))
+    onSelectedAiCardTitlesChange(nextCards.map((card) => card.title).join(', '))
+  }
+
+  function toggleCard(cardId) {
+    const safeId = String(cardId)
+    if (selectedSet.has(safeId)) {
+      updateSelectedCards(selectedIds.filter((item) => item !== safeId))
+      return
+    }
+
+    if (selectedIds.length >= MAX_AI_CARDS_PER_SUBMISSION) return
+    updateSelectedCards([...selectedIds, safeId])
+  }
+
   return (
     <form onSubmit={onSubmit} style={formGridStyle}>
       <p style={styles.eyebrow}>Player submission</p>
-      <div className="mpTwoCol">
-        <label style={fieldStyle}>
-          Selected AI card IDs
-          <input value={selectedAiCardIds} onChange={(event) => onSelectedAiCardIdsChange(event.target.value)} placeholder="Example: 1, 3, 5" style={inputStyle} />
-        </label>
-        <label style={fieldStyle}>
-          Selected AI card titles
-          <input value={selectedAiCardTitles} onChange={(event) => onSelectedAiCardTitlesChange(event.target.value)} placeholder="Example: Chatbot, Translator" style={inputStyle} />
-        </label>
+      <div style={questBoxStyle}>
+        <strong>Choose up to {MAX_AI_CARDS_PER_SUBMISSION} solution cards</strong>
+        <span>{selectedIds.length} selected: {selectedAiCardTitles || 'Choose cards below'}</span>
       </div>
+
+      <div className="mpAiChoiceGrid">
+        {aiCards.map((card) => {
+          const checked = selectedSet.has(String(card.id))
+          const disabled = !checked && selectedIds.length >= MAX_AI_CARDS_PER_SUBMISSION
+          return (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => toggleCard(card.id)}
+              disabled={disabled}
+              className={checked ? 'mpAiChoice active' : 'mpAiChoice'}
+            >
+              <strong>{card.title}</strong>
+              <small>{card.type}</small>
+            </button>
+          )
+        })}
+      </div>
+
       <label style={fieldStyle}>
         Explanation / solution
-        <textarea value={explanation} onChange={(event) => onExplanationChange(event.target.value)} placeholder="Write the multiplayer answer here..." style={textAreaStyle} />
+        <textarea
+          value={explanation}
+          onChange={(event) => onExplanationChange(event.target.value)}
+          placeholder="Write the multiplayer answer here in 100 words or less..."
+          style={wordLimitExceeded ? { ...textAreaStyle, borderColor: 'rgba(153, 27, 27, 0.55)' } : textAreaStyle}
+        />
       </label>
-      <button type="submit" style={primaryButtonStyle}>{buttonText}</button>
+      <p style={wordLimitExceeded ? styles.dangerText : styles.smallCardText}>{wordCount} / {MAX_EXPLANATION_WORDS} words</p>
+      <button type="submit" disabled={wordLimitExceeded} style={wordLimitExceeded ? disabledButtonStyle : primaryButtonStyle}>{buttonText}</button>
     </form>
   )
 }
@@ -1930,6 +2085,10 @@ function getMillis(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function countWords(value) {
+  return String(value || '').trim().split(/\s+/).filter(Boolean).length
+}
+
 function formatTime(value) {
   const millis = getMillis(value)
   if (!millis) return 'Not yet'
@@ -2043,6 +2202,12 @@ const secondaryButtonStyle = {
 const dangerButtonStyle = {
   ...primaryButtonStyle,
   background: 'linear-gradient(135deg, #991b1b, #5c1515)'
+}
+
+const disabledButtonStyle = {
+  ...secondaryButtonStyle,
+  cursor: 'not-allowed',
+  opacity: 0.6
 }
 
 const smallButtonStyle = {
@@ -2379,6 +2544,36 @@ const pageCss = `
   .mpHeroTitle {
     font-size: 2rem;
   }
+}
+
+.mpAiChoiceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.mpAiChoice {
+  border: 1px solid rgba(139, 92, 40, 0.18);
+  border-radius: 18px;
+  padding: 12px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.72);
+  color: #5c3512;
+  text-align: left;
+  display: grid;
+  gap: 5px;
+  min-height: 86px;
+}
+
+.mpAiChoice.active {
+  background: linear-gradient(135deg, rgba(154,106,34,.18), rgba(244,210,138,.42));
+  border-color: rgba(154,106,34,.5);
+  box-shadow: 0 12px 28px rgba(80,52,20,.12);
+}
+
+.mpAiChoice:disabled {
+  cursor: not-allowed;
+  opacity: .48;
 }
 `
 

@@ -6,7 +6,7 @@ function MultilingualScreen() {
   const { languageCode, languageOptions, setLanguage, t } = useLanguage()
   return <div style={styles.panel}>
     <SectionHeader eyebrow={t('language','Language')} title="Multilingual experience">
-      Choose a language from Firebase languageVersions. The app uses uiTranslations to translate the player interface.
+      Choose a language from the system languageVersions. The app uses uiTranslations to translate the player interface.
     </SectionHeader>
     <div style={styles.metricGrid}>
       {languageOptions.map((language) => <button key={language.languageCode} type="button" onClick={() => setLanguage(language.languageCode)} style={{...languageCard, borderColor: languageCode === language.languageCode ? 'rgba(22,101,52,.42)' : 'rgba(139,92,40,.16)'}}>

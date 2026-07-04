@@ -34,7 +34,7 @@ function AdminScoringRubricScreen() {
       const rows = await getAdminScoringRubrics()
       setRubrics(rows)
     } catch (err) {
-      setError(err.message || 'Could not load scoring rubrics from Firebase.')
+      setError(err.message || 'Could not load scoring rubrics from the system.')
     } finally {
       setLoading(false)
     }
@@ -53,7 +53,7 @@ function AdminScoringRubricScreen() {
 
   async function handleSeedDefaultRubrics() {
     const confirmed = window.confirm(
-      'Create or update the default 7 scoring rubric areas in Firebase?'
+      'Create or update the default 7 scoring rubric areas in the system?'
     )
 
     if (!confirmed) {
@@ -95,7 +95,7 @@ function AdminScoringRubricScreen() {
 
   async function handleDeleteRubric(rubric) {
     const confirmed = window.confirm(
-      `Delete "${rubric.categoryName}" from Firebase scoringRubrics?`
+      `Delete "${rubric.categoryName}" from the system scoringRubrics?`
     )
 
     if (!confirmed) {
@@ -123,10 +123,10 @@ function AdminScoringRubricScreen() {
     <div style={styles.panel}>
       <SectionHeader
         eyebrow="Admin scoring rubric management"
-        title="Manage DeepSeek evaluation rubric."
+        title="Manage the scoring engine evaluation rubric."
       >
         These rubric areas define how player explanations are scored out of 100.
-        Data is loaded from Firebase scoringRubrics.
+        Data is loaded from the system scoringRubrics.
       </SectionHeader>
 
       <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
@@ -174,7 +174,7 @@ function AdminScoringRubricScreen() {
         <div style={styles.smallCard}>
           <p style={styles.eyebrow}>Rubric Areas</p>
           <h3 style={styles.smallCardTitle}>{rubrics.length}</h3>
-          <p style={styles.smallCardText}>Loaded from Firebase.</p>
+          <p style={styles.smallCardText}>Loaded from the system.</p>
         </div>
 
         <div style={styles.smallCard}>
@@ -205,7 +205,7 @@ function AdminScoringRubricScreen() {
             <h3 style={styles.smallCardTitle}>Add scoring rubric area</h3>
           </div>
 
-          <Pill>{rubrics.length} Firebase rows</Pill>
+          <Pill>{rubrics.length} the system rows</Pill>
         </div>
 
         <form onSubmit={handleAddRubric} style={formGridStyle}>
@@ -282,7 +282,7 @@ function AdminScoringRubricScreen() {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase scoringRubrics collection</p>
+            <p style={styles.eyebrow}>the system scoringRubrics collection</p>
             <h3 style={styles.smallCardTitle}>Current scoring rubric</h3>
           </div>
 
@@ -291,7 +291,7 @@ function AdminScoringRubricScreen() {
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading scoring rubric from Firebase...
+            Loading scoring rubric from the system...
           </p>
         ) : rubrics.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>

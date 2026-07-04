@@ -3,7 +3,7 @@ import {
   PLAYER_COLLECTIONS,
   now,
   playerCollection
-} from './playerFirebaseService'
+} from './playerDataService'
 
 function cleanData(value) {
   if (Array.isArray(value)) {

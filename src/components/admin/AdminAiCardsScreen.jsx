@@ -32,7 +32,7 @@ function AdminAiCardsScreen() {
       const cards = await getAdminAiCards()
       setAiCards(cards)
     } catch (err) {
-      setError(err.message || 'Could not load AI cards from Firebase.')
+      setError(err.message || 'Could not load AI cards from the system.')
     } finally {
       setLoading(false)
     }
@@ -61,7 +61,7 @@ function AdminAiCardsScreen() {
       setSuccessMessage('AI card added successfully.')
       await loadAiCards()
     } catch (err) {
-      setError(err.message || 'Could not add AI card to Firebase.')
+      setError(err.message || 'Could not add AI card to the system.')
     } finally {
       setSaving(false)
     }
@@ -69,7 +69,7 @@ function AdminAiCardsScreen() {
 
   async function handleDeleteAiCard(card) {
     const confirmed = window.confirm(
-      `Delete "${card.title}" from Firebase aiCards?`
+      `Delete "${card.title}" from the system aiCards?`
     )
 
     if (!confirmed) {
@@ -85,7 +85,7 @@ function AdminAiCardsScreen() {
       setSuccessMessage('AI card deleted successfully.')
       await loadAiCards()
     } catch (err) {
-      setError(err.message || 'Could not delete AI card from Firebase.')
+      setError(err.message || 'Could not delete AI card from the system.')
     } finally {
       setDeletingId('')
     }
@@ -97,7 +97,7 @@ function AdminAiCardsScreen() {
         eyebrow="Admin AI card management"
         title="Manage AI cards."
       >
-        Add or delete AI capability cards directly from Firebase.
+        Add or delete AI capability cards directly from the system.
       </SectionHeader>
 
       <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
@@ -139,7 +139,7 @@ function AdminAiCardsScreen() {
             <h3 style={styles.smallCardTitle}>Add new AI card</h3>
           </div>
 
-          <Pill>{aiCards.length} Firebase cards</Pill>
+          <Pill>{aiCards.length} saved cards</Pill>
         </div>
 
         <form onSubmit={handleAddAiCard} style={formGridStyle}>
@@ -222,7 +222,7 @@ function AdminAiCardsScreen() {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase aiCards collection</p>
+            <p style={styles.eyebrow}>AI card records</p>
             <h3 style={styles.smallCardTitle}>Current AI cards</h3>
           </div>
 
@@ -231,11 +231,11 @@ function AdminAiCardsScreen() {
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading AI cards from Firebase...
+            Loading AI cards from the system...
           </p>
         ) : aiCards.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            No AI cards found in Firebase yet.
+            No AI cards found in the system yet.
           </p>
         ) : (
           <div style={tableWrapStyle}>

@@ -15,7 +15,7 @@ import {
   now,
   playerCollection,
   playerDoc
-} from './playerFirebaseService'
+} from './playerDataService'
 import {
   logAiCardsSelected,
   logGameSessionStarted,

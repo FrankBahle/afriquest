@@ -143,7 +143,7 @@ export function Pill({ children, tone = 'default' }) {
 
 
 
-export function LoadingPage({ title = 'Loading data', message = 'Connecting to Firebase and preparing this page...', compact = false }) {
+export function LoadingPage({ title = 'Loading data', message = 'Connecting to the system and preparing this page...', compact = false }) {
   return (
     <div
       style={{

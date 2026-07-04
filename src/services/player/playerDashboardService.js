@@ -2,7 +2,7 @@ import { getDocs, query, where } from 'firebase/firestore'
 import {
   PLAYER_COLLECTIONS,
   playerCollection
-} from './playerFirebaseService'
+} from './playerDataService'
 import { getPlayerProfile } from './playerProfileService'
 import { logDashboardViewed } from './playerAnalyticsService'
 

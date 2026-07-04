@@ -59,7 +59,7 @@ function CoinHistoryScreen({
 
       setWalletData(result)
     } catch (err) {
-      setError(err.message || 'Could not load GLA coin wallet from Firebase.')
+      setError(err.message || 'Could not load GLA coin wallet from the system.')
       setWalletData({
         transactions: coinTransactions,
         summary: {
@@ -115,7 +115,7 @@ function CoinHistoryScreen({
     return (
       <LoadingPage
         title="Loading GLA coin wallet"
-        message="Fetching wallet balance and transaction history from Firebase."
+        message="Fetching wallet balance and transaction history from the system."
       />
     )
   }
@@ -127,7 +127,7 @@ function CoinHistoryScreen({
         title="Track your learning currency."
       >
         GLA coin is earned from scores and spent on hints. This screen connects
-        to Firebase using the glaCoinTransactions collection.
+        to the system using the glaCoinTransactions collection.
       </SectionHeader>
 
       {onBackToDashboard && (
@@ -221,7 +221,7 @@ function CoinHistoryScreen({
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase glaCoinTransactions collection</p>
+            <p style={styles.eyebrow}>the system glaCoinTransactions collection</p>
             <h3 style={styles.smallCardTitle}>Coin history</h3>
           </div>
 
@@ -230,7 +230,7 @@ function CoinHistoryScreen({
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading GLA coin transactions from Firebase...
+            Loading GLA coin transactions from the system...
           </p>
         ) : filteredTransactions.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>

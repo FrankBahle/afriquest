@@ -21,7 +21,7 @@ import {
   now,
   playerCollection,
   playerDoc
-} from './playerFirebaseService'
+} from './playerDataService'
 import { logProfileUpdated } from './playerAnalyticsService'
 
 const defaultPlayerFields = {
@@ -68,7 +68,7 @@ function getFriendlyAuthError(error) {
   const code = error?.code || ''
 
   if (code === 'auth/requires-recent-login') {
-    return 'For security, Firebase needs you to log out and log in again before changing your email or password.'
+    return 'For security, the system needs you to log out and log in again before changing your email or password.'
   }
 
   if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {

@@ -46,7 +46,7 @@ function AdminLanguageManagementScreen() {
     try {
       setRows(await getLanguages())
     } catch (err) {
-      setError(err.message || 'Could not load languages from Firebase.')
+      setError(err.message || 'Could not load languages from the system.')
     } finally {
       setLoading(false)
     }

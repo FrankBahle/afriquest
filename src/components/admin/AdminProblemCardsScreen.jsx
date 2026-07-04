@@ -35,7 +35,7 @@ function AdminProblemCardsScreen() {
     } catch (err) {
       setError(
         err.message ||
-          'Could not load problem cards from Firebase.'
+          'Could not load problem cards from the system.'
       )
     } finally {
       setLoading(false)
@@ -67,7 +67,7 @@ function AdminProblemCardsScreen() {
     } catch (err) {
       setError(
         err.message ||
-          'Could not add problem card to Firebase.'
+          'Could not add problem card to the system.'
       )
     } finally {
       setSaving(false)
@@ -76,7 +76,7 @@ function AdminProblemCardsScreen() {
 
   async function handleDeleteProblemCard(card) {
     const confirmed = window.confirm(
-      `Delete "${card.title}" from Firebase problemCards?`
+      `Delete "${card.title}" from the system problemCards?`
     )
 
     if (!confirmed) {
@@ -94,7 +94,7 @@ function AdminProblemCardsScreen() {
     } catch (err) {
       setError(
         err.message ||
-          'Could not delete problem card from Firebase.'
+          'Could not delete problem card from the system.'
       )
     } finally {
       setDeletingId('')
@@ -107,7 +107,7 @@ function AdminProblemCardsScreen() {
         eyebrow="Admin problem card management"
         title="Manage problem cards."
       >
-        Add or delete African SDG problem cards directly from Firebase.
+        Add or delete African SDG problem cards directly from the system.
       </SectionHeader>
 
       <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
@@ -135,7 +135,7 @@ function AdminProblemCardsScreen() {
             <h3 style={styles.smallCardTitle}>Add new problem card</h3>
           </div>
 
-          <Pill>{problemCards.length} Firebase cards</Pill>
+          <Pill>{problemCards.length} saved cards</Pill>
         </div>
 
         <form onSubmit={handleAddProblemCard} style={formGridStyle}>
@@ -222,7 +222,7 @@ function AdminProblemCardsScreen() {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase problemCards collection</p>
+            <p style={styles.eyebrow}>Problem card records</p>
             <h3 style={styles.smallCardTitle}>Current problem cards</h3>
           </div>
 
@@ -231,11 +231,11 @@ function AdminProblemCardsScreen() {
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading problem cards from Firebase...
+            Loading problem cards from the system...
           </p>
         ) : problemCards.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            No problem cards found in Firebase yet.
+            No problem cards found in the system yet.
           </p>
         ) : (
           <div style={tableWrapStyle}>

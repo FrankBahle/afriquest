@@ -55,7 +55,7 @@ function AdminSdgMappingScreen() {
       })
       setDrafts(nextDrafts)
     } catch (err) {
-      setError(err.message || 'Could not load SDG mappings from Firebase.')
+      setError(err.message || 'Could not load SDG mappings from the system.')
     } finally {
       setLoading(false)
     }
@@ -113,7 +113,7 @@ function AdminSdgMappingScreen() {
   return (
     <div style={styles.panel}>
       <SectionHeader eyebrow="Admin SDG mapping management" title="Manage problem-card SDG links.">
-        SDG mapping belongs on each problem card as the sdg_goals field. This screen edits that field in Firebase problemCards.
+        SDG mapping belongs on each problem card as the sdg_goals field. This screen edits that field in the system problemCards.
       </SectionHeader>
 
       {error && (
@@ -132,7 +132,7 @@ function AdminSdgMappingScreen() {
         <div style={styles.smallCard}>
           <p style={styles.eyebrow}>Problem cards</p>
           <h3 style={styles.smallCardTitle}>{problemCards.length}</h3>
-          <p style={styles.smallCardText}>Loaded from Firebase problemCards.</p>
+          <p style={styles.smallCardText}>Loaded from the system problemCards.</p>
         </div>
         <div style={styles.smallCard}>
           <p style={styles.eyebrow}>Mapped cards</p>
@@ -176,7 +176,7 @@ function AdminSdgMappingScreen() {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase problemCards collection</p>
+            <p style={styles.eyebrow}>Problem card records</p>
             <h3 style={styles.smallCardTitle}>Edit SDG links</h3>
           </div>
           <Pill>{loading ? 'Loading...' : `${filteredCards.length} shown`}</Pill>

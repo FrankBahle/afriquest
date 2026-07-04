@@ -33,7 +33,7 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
         onChange?.(next)
         onSettingsChange?.(next)
       } catch (err) {
-        setError(err.message || 'Could not load settings from Firebase.')
+        setError(err.message || 'Could not load settings from the system.')
       }
     }
 
@@ -72,7 +72,7 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
       onChange?.(saved)
       onSettingsChange?.(saved)
       onSaved?.(saved)
-      setMessage('Settings saved to Firebase and applied across the player system.')
+      setMessage('Settings saved to the system and applied across the player system.')
     } catch (err) {
       setError(err.message || 'Could not save settings.')
     } finally {
@@ -86,7 +86,7 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
         <div>
           <p style={{ ...styles.eyebrow, color: '#f4d28a' }}>{t('settings', 'Settings')}</p>
           <h1 style={settingsHeroTitleStyle}>{t('accessibilitySettings', 'Professional player settings')}</h1>
-          <p style={settingsHeroTextStyle}>Manage language, accessibility and game display preferences. These settings are saved to Firebase and applied in the app.</p>
+          <p style={settingsHeroTextStyle}>Manage language, accessibility and game display preferences. These settings are saved to the system and applied in the app.</p>
         </div>
 
         <div style={languageBadgeStyle}>
@@ -107,7 +107,7 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
       {message && <Notice tone="success">{message}</Notice>}
 
       <SectionHeader eyebrow="Language" title="Translate the player interface">
-        Pick the player language. With auto-translate on, sidebar labels, page headings, buttons and supported UI text translate using Firebase `uiTranslations` plus built-in fallbacks.
+        Pick the player language. With auto-translate on, sidebar labels, page headings, buttons and supported UI text translate using the system `uiTranslations` plus built-in fallbacks.
       </SectionHeader>
 
       <div style={languageGridStyle}>

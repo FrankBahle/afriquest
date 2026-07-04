@@ -4,6 +4,26 @@ import jsPDF from 'jspdf'
 import { styles } from './gameStyles'
 import { ActionButton, MetricCard, SectionHeader } from './ui'
 
+function makeSafeFileName(value) {
+  return String(value || 'GLA-AI-Certificate')
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'GLA-AI-Certificate'
+}
+
+function downloadHtmlCertificate({ certificateHtml, certificateId }) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${certificateId}</title></head><body>${certificateHtml}</body></html>`
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${makeSafeFileName(certificateId)}.html`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 function CertificateScreen({
   fullName,
   completedProblems,
@@ -23,23 +43,41 @@ function CertificateScreen({
 
     try {
       const canvas = await html2canvas(certificateRef.current, {
-        scale: 2,
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
         useCORS: true,
+        allowTaint: true,
+        logging: false,
         backgroundColor: '#fff8eb'
       })
 
-      const imageData = canvas.toDataURL('image/png')
+      const imageData = canvas.toDataURL('image/png', 1)
       const pdf = new jsPDF({
         orientation: 'landscape',
-        unit: 'px',
-        format: [canvas.width, canvas.height]
+        unit: 'mm',
+        format: 'a4'
       })
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const imageRatio = canvas.width / canvas.height
+      let renderWidth = pageWidth
+      let renderHeight = renderWidth / imageRatio
 
-      pdf.addImage(imageData, 'PNG', 0, 0, canvas.width, canvas.height)
-      pdf.save(`${certificateId || 'GLA-AI-Certificate'}.pdf`)
+      if (renderHeight > pageHeight) {
+        renderHeight = pageHeight
+        renderWidth = renderHeight * imageRatio
+      }
+
+      const x = (pageWidth - renderWidth) / 2
+      const y = (pageHeight - renderHeight) / 2
+
+      pdf.addImage(imageData, 'PNG', x, y, renderWidth, renderHeight)
+      pdf.save(`${makeSafeFileName(certificateId || 'GLA-AI-Certificate')}.pdf`)
     } catch (error) {
       console.error(error)
-      alert('Certificate download failed. Please try again.')
+      downloadHtmlCertificate({
+        certificateHtml: certificateRef.current.outerHTML,
+        certificateId: certificateId || 'GLA-AI-Certificate'
+      })
     } finally {
       setIsDownloading(false)
     }
@@ -47,6 +85,14 @@ function CertificateScreen({
 
   return (
     <div style={styles.panel}>
+      <style>{`
+        .certificateCanvas { max-width: 100%; overflow-wrap: anywhere; }
+        @media (max-width: 700px) {
+          .certificateCanvas { padding: 24px !important; border-radius: 20px !important; }
+          .certificateCanvas h1 { font-size: 1.65rem !important; }
+          .certificateCanvas h2 { font-size: 1.45rem !important; }
+        }
+      `}</style>
       <SectionHeader eyebrow="Certificate" title="GRIT Lab Africa certificate">
         Complete 10 problem cards with an average score of 75 or higher to unlock your certificate.
       </SectionHeader>
@@ -60,6 +106,7 @@ function CertificateScreen({
 
       <div
         ref={certificateRef}
+        className="certificateCanvas"
         style={{
           marginTop: '24px',
           padding: '42px',

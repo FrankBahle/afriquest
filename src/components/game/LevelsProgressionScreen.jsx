@@ -50,7 +50,7 @@ function LevelsProgressionScreen({
 
       setLevelProgress(syncedProgress)
     } catch (err) {
-      setError(err.message || 'Could not sync player level with Firebase.')
+      setError(err.message || 'Could not sync player level with the system.')
 
       const localProgress = calculatePlayerLevelProgress({
         totalGlaCoinEarned,
@@ -72,7 +72,7 @@ function LevelsProgressionScreen({
     return (
       <LoadingPage
         title="Loading levels"
-        message="Checking locked and unlocked levels from Firebase."
+        message="Checking locked and unlocked levels from the system."
       />
     )
   }
@@ -106,7 +106,7 @@ function LevelsProgressionScreen({
         title="Grow from AI Explorer to Impact Leader."
       >
         Levels are calculated from completed problems, average score and total
-        GLA coin earned. The current level is saved to the Firebase users document.
+        GLA coin earned. The current level is saved to the player records document.
       </SectionHeader>
 
       {error && (

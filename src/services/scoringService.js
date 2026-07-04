@@ -4,7 +4,7 @@ export async function gradeExplanation({
   selectedAiCards = [],
   userExplanation
 }) {
-  const response = await fetch('/api/deepseek/explain', {
+  const response = await fetch('/api/scoring/explain', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'

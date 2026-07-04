@@ -6,7 +6,7 @@ import {
   now,
   playerCollection,
   playerDoc
-} from './playerFirebaseService'
+} from './playerDataService'
 import { getPlayerDashboardData } from './playerDashboardService'
 import { logCertificateUnlocked } from './playerAnalyticsService'
 

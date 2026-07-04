@@ -18,7 +18,7 @@ function GameSidebar({ screen, onNavigate, onClose, selectedProblemCount = 0, co
     ]},
     { title: t('experience','Experience'), items: [
       { id: 'accessibility', label: t('settings','Settings'), icon: '⚙️', detail: 'App settings' },
-      { id: 'designs', label: t('cardDesigns','Card designs'), icon: '🖼️', detail: 'Firebase images' },
+      { id: 'designs', label: t('cardDesigns','Card designs'), icon: '🖼️', detail: 'the system images' },
       { id: 'multiplayer', label: t('multiplayer','Multiplayer'), icon: '🎮', detail: 'Rooms' },
       { id: 'rewards', label: t('rewards','Rewards'), icon: '🎁', detail: 'Launch rewards' }
     ]}

@@ -53,6 +53,10 @@ export function cleanFirestoreData(value) {
   }
 
   if (value && typeof value === 'object') {
+    if (value instanceof Date || (value.constructor && value.constructor.name !== 'Object')) {
+      return value
+    }
+
     const cleaned = {}
 
     Object.entries(value).forEach(([key, item]) => {

@@ -34,7 +34,7 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
       setCardSkins(data.cardSkins)
       setUserCardSkins(data.userCardSkins)
     } catch (err) {
-      setError(err.message || 'Could not load card design data from Firebase.')
+      setError(err.message || 'Could not load card design data from the system.')
     } finally {
       setLoading(false)
     }
@@ -61,7 +61,7 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
     setStatusMessage('')
     try {
       await equipPlayerCardSkin({ userId: currentUser?.uid, skinId: skin.skinId })
-      setStatusMessage('Card skin equipped and saved to Firebase.')
+      setStatusMessage('Card skin equipped and saved to the system.')
       await loadDesigns()
     } catch (err) {
       setError(err.message || 'Could not equip this card skin.')
@@ -87,7 +87,7 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
     return (
       <LoadingPage
         title="Loading card designs"
-        message="Fetching available card skins and unlocked player designs from Firebase."
+        message="Fetching available card skins and unlocked player designs from the system."
       />
     )
   }
@@ -112,13 +112,13 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
         <div style={styles.rowBetween}>
           <div>
             <p style={styles.eyebrow}>Unlockable card skins</p>
-            <h3 style={styles.smallCardTitle}>Firebase cardSkins and userCardSkins</h3>
+            <h3 style={styles.smallCardTitle}>the system cardSkins and userCardSkins</h3>
           </div>
           <Pill>{cardSkins.length} skins</Pill>
         </div>
 
         {loading ? (
-          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading card skins from Firebase...</p>
+          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading card skins from the system...</p>
         ) : cardSkins.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 14 }}>No card skins found yet. Admin can add them in card design management.</p>
         ) : (
@@ -172,14 +172,14 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase card image fields</p>
+            <p style={styles.eyebrow}>the system card image fields</p>
             <h3 style={styles.smallCardTitle}>Card image gallery</h3>
           </div>
           <Pill>{loading ? 'Loading' : `${filteredCards.length} visible`}</Pill>
         </div>
 
         {loading ? (
-          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading card designs from Firebase...</p>
+          <p style={{ ...styles.smallCardText, marginTop: 14 }}>Loading card designs from the system...</p>
         ) : filteredCards.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 14 }}>No card designs match your filters.</p>
         ) : (
@@ -200,7 +200,7 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
                   <p style={styles.smallCardText}>{card.subtitle}</p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                     <Pill>{card.cardTheme}</Pill>
-                    <Pill tone={card.frontImageUrl || card.backImageUrl ? 'success' : 'default'}>{card.frontImageUrl || card.backImageUrl ? 'Firebase image' : 'Fallback image'}</Pill>
+                    <Pill tone={card.frontImageUrl || card.backImageUrl ? 'success' : 'default'}>{card.frontImageUrl || card.backImageUrl ? 'the system image' : 'Fallback image'}</Pill>
                   </div>
                 </article>
               )

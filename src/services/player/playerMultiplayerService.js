@@ -95,6 +95,17 @@ function autoScore(text = '', aiIds = []) {
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
+function countWords(value) {
+  return cleanText(value).split(/\s+/).filter(Boolean).length
+}
+
+function validateMultiplayerSubmission({ explanation, aiIds }) {
+  if (!cleanText(explanation)) throw new Error('Explanation is required.')
+  if (countWords(explanation) > 100) throw new Error('The explanation must be 100 words or less.')
+  if (!Array.isArray(aiIds) || aiIds.length < 1) throw new Error('Choose at least one solution card.')
+  if (aiIds.length > 3) throw new Error('Choose a maximum of three solution cards.')
+}
+
 function buildWorkflowStage(mode, status) {
   if (status === 'waiting') return 'lobby_waiting'
   if (status === 'active') return `${mode}_active`
@@ -931,14 +942,20 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
   const room = await getRoom(roomId)
   if (isRoomClosed(room)) throw new Error('This room has ended.')
   if (!userId) throw new Error('User ID is required.')
-  if (!cleanText(explanation)) throw new Error('Explanation is required.')
 
   const aiIds = splitCsv(selectedAiCardIds)
   const aiTitles = splitCsv(selectedAiCardTitles)
-  const totalScore = autoScore(explanation, aiIds)
-  const attemptId = `${roomId}_${userId}_${Date.now()}`
+  validateMultiplayerSubmission({ explanation, aiIds })
 
-  await setDoc(doc(db, C.attempts, attemptId), safeClean({
+  const totalScore = autoScore(explanation, aiIds)
+  const attemptId = `${roomId}_challenge_${userId}`
+  const attemptRef = doc(db, C.attempts, attemptId)
+  const attemptSnap = await getDoc(attemptRef)
+  const previousAttempt = attemptSnap.exists() ? attemptSnap.data() : {}
+  const bestScore = Math.max(toNumber(previousAttempt.bestScore || previousAttempt.totalScore), totalScore)
+  const attemptNumber = toNumber(previousAttempt.attemptNumber) + 1
+
+  await setDoc(attemptRef, safeClean({
     attemptId,
     roomId,
     roomCode: room.roomCode,
@@ -952,9 +969,11 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
     selectedAiCardTitles: aiTitles,
     explanation: cleanText(explanation),
     totalScore,
-    feedback: 'Automatic multiplayer score saved. DeepSeek can be connected later.',
+    bestScore,
+    attemptNumber,
+    feedback: 'Challenge answer saved. Ranking uses the latest submitted score and keeps the best score for reference.',
     status: 'submitted',
-    createdAt: nowDate(),
+    createdAt: previousAttempt.createdAt || nowDate(),
     submittedAt: nowDate(),
     updatedAt: nowDate(),
     isSchema: false
@@ -969,6 +988,7 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
     role: userId === room.createdBy ? 'host' : 'player',
     status: 'submitted',
     score: totalScore,
+    bestScore,
     submittedAt: nowDate(),
     lastSeenAt: nowDate(),
     updatedAt: nowDate(),
@@ -982,12 +1002,12 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
     actorUserId: userId,
     actorDisplayName: displayName,
     message: `${displayName || 'A player'} submitted a challenge answer.`,
-    metadata: { totalScore }
+    metadata: { totalScore, bestScore }
   })
 
   await touchRoom(roomId, { workflowStage: 'challenge_scoring' })
 
-  return { attemptId, totalScore }
+  return { attemptId, totalScore, bestScore }
 }
 
 export async function createTeam({ roomId, teamName, userId, displayName }) {
@@ -1046,25 +1066,33 @@ export async function submitTeamSolution({ roomId, teamId, userId, displayName, 
 
   const aiIds = splitCsv(selectedAiCardIds)
   const aiTitles = splitCsv(selectedAiCardTitles)
-  const totalScore = autoScore(explanation, aiIds)
-  const teamSessionId = `${roomId}_${teamId}_${Date.now()}`
+  validateMultiplayerSubmission({ explanation, aiIds })
 
-  await setDoc(doc(db, C.teamSessions, teamSessionId), safeClean({
+  const totalScore = autoScore(explanation, aiIds)
+  const teamSessionId = `${roomId}_${teamId}`
+  const sessionRef = doc(db, C.teamSessions, teamSessionId)
+  const sessionSnap = await getDoc(sessionRef)
+  const previousSession = sessionSnap.exists() ? sessionSnap.data() : {}
+  const bestScore = Math.max(toNumber(previousSession.bestScore || previousSession.totalScore), totalScore)
+
+  await setDoc(sessionRef, safeClean({
     teamSessionId,
     roomId,
     roomCode: room.roomCode,
     teamId,
     submittedBy: userId,
     submittedByName: displayName,
+    displayName: displayName,
     problemCardId: cleanText(problemCardId || room.currentProblemId),
     problemTitle: cleanText(problemTitle || room.currentProblemTitle),
     selectedAiCardIds: aiIds,
     selectedAiCardTitles: aiTitles,
     sharedExplanation: cleanText(explanation),
     totalScore,
-    feedback: 'Team solution saved and scored automatically.',
+    bestScore,
+    feedback: 'Team solution saved and scored. The latest team answer remains visible to everyone in the room.',
     status: 'submitted',
-    createdAt: nowDate(),
+    createdAt: previousSession.createdAt || nowDate(),
     submittedAt: nowDate(),
     updatedAt: nowDate(),
     isSchema: false
@@ -1072,13 +1100,14 @@ export async function submitTeamSolution({ roomId, teamId, userId, displayName, 
 
   await updateDoc(doc(db, C.teams, teamId), {
     teamScore: totalScore,
+    bestScore,
     status: 'submitted',
     updatedAt: nowDate()
   })
 
   await touchRoom(roomId, { workflowStage: 'team_submissions' })
-  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'team_solution_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a team solution.`, metadata: { totalScore } })
-  return { teamSessionId, totalScore }
+  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'team_solution_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a team solution.`, metadata: { totalScore, bestScore } })
+  return { teamSessionId, totalScore, bestScore }
 }
 
 export async function updateDebatePrompt({ roomId, prompt, actorUserId, actorDisplayName }) {
@@ -1114,45 +1143,54 @@ export async function updateDebatePrompt({ roomId, prompt, actorUserId, actorDis
 export async function submitDebateArgument({ roomId, debateId, userId, displayName, argumentText, selectedAiCardIds, selectedAiCardTitles }) {
   const room = await getRoom(roomId)
   if (isRoomClosed(room)) throw new Error('This room has ended.')
-  if (!cleanText(argumentText)) throw new Error('Argument is required.')
 
   const aiIds = splitCsv(selectedAiCardIds)
   const aiTitles = splitCsv(selectedAiCardTitles)
-  const totalScore = autoScore(argumentText, aiIds)
-  const attemptId = `${roomId}_debate_${userId}_${Date.now()}`
+  validateMultiplayerSubmission({ explanation: argumentText, aiIds })
 
-  await setDoc(doc(db, C.attempts, attemptId), safeClean({
+  const totalScore = autoScore(argumentText, aiIds)
+  const safeDebateId = debateId || `${roomId}_debate`
+  const attemptId = `${safeDebateId}_${userId}`
+  const attemptRef = doc(db, C.attempts, attemptId)
+  const attemptSnap = await getDoc(attemptRef)
+  const previousAttempt = attemptSnap.exists() ? attemptSnap.data() : {}
+  const bestScore = Math.max(toNumber(previousAttempt.bestScore || previousAttempt.totalScore), totalScore)
+
+  await setDoc(attemptRef, safeClean({
     attemptId,
     roomId,
     roomCode: room.roomCode,
-    debateId: debateId || `${roomId}_debate`,
+    debateId: safeDebateId,
     userId,
     displayName: cleanText(displayName) || 'Player',
     isMultiplayer: true,
     multiplayerMode: 'debate',
-    problemCardId: debateId || `${roomId}_debate`,
+    problemCardId: safeDebateId,
     problemTitle: room.currentQuestTitle || 'Debate prompt',
     selectedAiCardIds: aiIds,
     selectedAiCardTitles: aiTitles,
     explanation: cleanText(argumentText),
     argumentText: cleanText(argumentText),
     totalScore,
-    feedback: 'Debate argument saved and scored automatically.',
+    bestScore,
+    feedback: 'Debate argument saved. Players can vote for the strongest categories.',
     status: 'submitted',
-    createdAt: nowDate(),
+    createdAt: previousAttempt.createdAt || nowDate(),
     submittedAt: nowDate(),
     updatedAt: nowDate(),
     isSchema: false
   }), { merge: true })
 
   await touchRoom(roomId, { workflowStage: 'debate_voting' })
-  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'debate_argument_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a debate argument.`, metadata: { totalScore } })
-  return { attemptId, totalScore }
+  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'debate_argument_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a debate argument.`, metadata: { totalScore, bestScore } })
+  return { attemptId, totalScore, bestScore }
 }
 
 export async function submitDebateVote({ roomId, debateId, voterUserId, voterDisplayName, targetUserId, targetDisplayName, voteCategory }) {
   if (!targetUserId) throw new Error('Choose a player to vote for.')
+  if (targetUserId === voterUserId) throw new Error('Choose another player to vote for.')
   const room = await getRoom(roomId)
+  if (isRoomClosed(room)) throw new Error('This room has ended.')
   const safeCategory = cleanText(voteCategory) || 'most_realistic'
   const voteId = `${debateId || `${roomId}_debate`}_${voterUserId}_${targetUserId}_${safeCategory}`
 
@@ -1175,6 +1213,24 @@ export async function submitDebateVote({ roomId, debateId, voterUserId, voterDis
   return voteId
 }
 
+async function ensureTournamentPlayersFromRoom({ roomId, tournamentId }) {
+  const players = await getRoomPlayers(roomId)
+  await Promise.all(players.map((player) => setDoc(doc(db, C.tournamentPlayers, `${roomId}_${player.userId}`), safeClean({
+    tournamentPlayerId: `${roomId}_${player.userId}`,
+    tournamentId,
+    roomId,
+    userId: player.userId,
+    displayName: cleanText(player.displayName) || 'Player',
+    totalScore: 0,
+    averageScore: 0,
+    completedRounds: 0,
+    rank: 0,
+    joinedAt: player.joinedAt || nowDate(),
+    updatedAt: nowDate(),
+    isSchema: false
+  }), { merge: true })))
+}
+
 export async function startTournamentRoom({ roomId, title, roundCount = 3, createdBy, createdByName }) {
   const room = await getRoom(roomId)
   const tournamentId = `${roomId}_tournament`
@@ -1195,6 +1251,8 @@ export async function startTournamentRoom({ roomId, title, roundCount = 3, creat
     updatedAt: nowDate(),
     isSchema: false
   }), { merge: true })
+
+  await ensureTournamentPlayersFromRoom({ roomId, tournamentId })
 
   await touchRoom(roomId, {
     mode: 'tournament',
@@ -1241,15 +1299,22 @@ export async function submitTournamentRound({ roomId, tournamentId, userId, disp
   const safeRound = toNumber(roundNumber || room.currentRound, 1)
   const aiIds = splitCsv(selectedAiCardIds)
   const aiTitles = splitCsv(selectedAiCardTitles)
+  validateMultiplayerSubmission({ explanation, aiIds })
+
   const totalScore = autoScore(explanation, aiIds)
-  const attemptId = `${roomId}_tournament_${userId}_${safeRound}_${Date.now()}`
+  const attemptId = `${roomId}_tournament_${userId}_round_${safeRound}`
+  const attemptRef = doc(db, C.attempts, attemptId)
+  const previousAttemptSnap = await getDoc(attemptRef)
+  const previousAttempt = previousAttemptSnap.exists() ? previousAttemptSnap.data() : null
+  const oldRoundScore = previousAttempt ? toNumber(previousAttempt.totalScore) : 0
+  const isNewRoundForPlayer = !previousAttempt
   const playerRef = doc(db, C.tournamentPlayers, `${roomId}_${userId}`)
   const playerSnap = await getDoc(playerRef)
   const existing = playerSnap.exists() ? playerSnap.data() : {}
-  const completedRounds = toNumber(existing.completedRounds) + 1
-  const accumulatedScore = toNumber(existing.totalScore) + totalScore
+  const completedRounds = toNumber(existing.completedRounds) + (isNewRoundForPlayer ? 1 : 0)
+  const accumulatedScore = Math.max(0, toNumber(existing.totalScore) - oldRoundScore + totalScore)
 
-  await setDoc(doc(db, C.attempts, attemptId), safeClean({
+  await setDoc(attemptRef, safeClean({
     attemptId,
     roomId,
     roomCode: room.roomCode,
@@ -1265,9 +1330,9 @@ export async function submitTournamentRound({ roomId, tournamentId, userId, disp
     selectedAiCardTitles: aiTitles,
     explanation: cleanText(explanation),
     totalScore,
-    feedback: 'Tournament round saved and scored automatically.',
+    feedback: 'Tournament round saved. Resubmitting the same round updates your round score instead of duplicating it.',
     status: 'submitted',
-    createdAt: nowDate(),
+    createdAt: previousAttempt?.createdAt || nowDate(),
     submittedAt: nowDate(),
     updatedAt: nowDate(),
     isSchema: false

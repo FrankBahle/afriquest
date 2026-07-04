@@ -340,7 +340,7 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
                 onClick={onSubmit}
                 disabled={selectedAiCards.length === 0 || !userExplanation.trim() || explanationTooLong || hasSubmittedExplanation || aiLoading}
               >
-                {aiLoading ? 'Scoring with DeepSeek...' : 'Submit Solution'}
+                {aiLoading ? 'Scoring with the scoring engine...' : 'Submit Solution'}
               </ActionButton>
               <ActionButton variant="secondary" onClick={onShowHintConfirm} disabled={aiLoading}>Request Hint - 20 GLA</ActionButton>
               {latestAttempt && <ActionButton variant="secondary" onClick={onOpenLatestScore}>View Latest Score</ActionButton>}

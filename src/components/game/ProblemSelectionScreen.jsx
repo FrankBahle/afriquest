@@ -52,7 +52,7 @@ function ProblemSelectionScreen({ cards, selectedProblemIds, onToggleProblem, on
       <div style={styles.metricGrid}>
         <MetricCard title="Selected" value={selectedCount} helper={canStart ? 'Ready to play' : `${remainingCount} more needed`} />
         <MetricCard title="Required" value="10" helper="Minimum stack size" />
-        <MetricCard title="Total Cards" value={cards.length} helper="Available from Firebase" />
+        <MetricCard title="Total Cards" value={cards.length} helper="Available from the system" />
       </div>
 
       <div style={styles.cardGrid}>

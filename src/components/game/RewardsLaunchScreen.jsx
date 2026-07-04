@@ -33,7 +33,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
       setLaunchSettings(data.launchSettings || null)
       setPublicLaunchEvents(data.publicLaunchEvents || [])
     } catch (err) {
-      setError(err.message || 'Could not load rewards and launch data from Firebase.')
+      setError(err.message || 'Could not load rewards and launch data from the system.')
     } finally {
       setLoading(false)
     }
@@ -49,7 +49,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
 
     try {
       const count = await seedStarterRewardsLaunchData()
-      setStatusMessage(`${count} starter reward and launch records saved to Firebase.`)
+      setStatusMessage(`${count} starter reward and launch records checked.`)
       await loadRewards()
     } catch (err) {
       setError(err.message || 'Could not create starter reward data.')
@@ -65,9 +65,10 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
         userId: currentUser?.uid,
         reward,
         completedProblems,
-        averageScore
+        averageScore,
+        certificateUnlocked
       })
-      setStatusMessage('Reward claim submitted. Admin can now review it from Firebase rewardClaims.')
+      setStatusMessage('Reward unlocked successfully. Check your claimed rewards below.')
       await loadRewards()
     } catch (err) {
       setError(err.message || 'Could not claim this reward.')
@@ -82,14 +83,22 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
     return map
   }, [claims])
 
+  function canClaimReward(reward) {
+    const hasCompleted = completedProblems >= reward.requiredCompletedProblems
+    const hasAverage = averageScore >= reward.requiredAverageScore
+    const hasCertificate = reward.requiredCertificate ? certificateUnlocked : true
+
+    return hasCompleted && hasAverage && hasCertificate
+  }
+
   const rewardStats = useMemo(() => {
     const claimable = rewards.filter((reward) => {
       const claimed = Boolean(claimMap[reward.rewardId])
-      return !claimed && completedProblems >= reward.requiredCompletedProblems && averageScore >= reward.requiredAverageScore
+      return !claimed && canClaimReward(reward)
     }).length
 
     const locked = rewards.filter((reward) => {
-      return completedProblems < reward.requiredCompletedProblems || averageScore < reward.requiredAverageScore
+      return !canClaimReward(reward)
     }).length
 
     return {
@@ -98,13 +107,13 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
       claimed: claims.length,
       locked
     }
-  }, [rewards, claims.length, claimMap, completedProblems, averageScore])
+  }, [rewards, claims.length, claimMap, completedProblems, averageScore, certificateUnlocked])
 
   const filteredRewards = useMemo(() => {
     const cleanSearch = searchTerm.trim().toLowerCase()
 
     return rewards.filter((reward) => {
-      const canClaim = completedProblems >= reward.requiredCompletedProblems && averageScore >= reward.requiredAverageScore
+      const canClaim = canClaimReward(reward)
       const claimed = Boolean(claimMap[reward.rewardId])
       const text = [reward.title, reward.description, reward.sponsorName, reward.rewardType].join(' ').toLowerCase()
       const matchesSearch = !cleanSearch || text.includes(cleanSearch)
@@ -116,13 +125,13 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
 
       return matchesSearch && matchesFilter
     })
-  }, [rewards, searchTerm, rewardFilter, completedProblems, averageScore, claimMap])
+  }, [rewards, searchTerm, rewardFilter, completedProblems, averageScore, certificateUnlocked, claimMap])
 
   if (loading) {
     return (
       <LoadingPage
         title="Loading rewards"
-        message="Checking available rewards and player claim status from Firebase."
+        message="Checking available rewards and player claim status from the system."
       />
     )
   }
@@ -134,9 +143,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
           <p style={{ ...styles.eyebrow, color: '#f4d28a' }}>GRIT Lab Africa rewards</p>
           <h1 style={heroTitleStyle}>Launch rewards and sponsor opportunities.</h1>
           <p style={heroTextStyle}>
-            Rewards are connected to Firebase collections: sponsorRewards, rewardClaims,
-            launchSettings and publicLaunchEvents. Claimable rewards depend on your real
-            completed cards and average score.
+            Rewards unlock from your real progress: completed cards, average score, certificate status and continued play. Some future rewards remain subject to programme approval and availability.
           </p>
         </div>
 
@@ -151,19 +158,19 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
       {statusMessage && <MessageCard message={statusMessage} tone="success" />}
 
       <div style={styles.metricGrid}>
-        <ProfessionalMetric title="Launch Status" value={launchSettings?.launchStatus || 'pilot'} detail="launchSettings" />
-        <ProfessionalMetric title="Available Rewards" value={rewardStats.total} detail="sponsorRewards" />
+        <ProfessionalMetric title="Launch Status" value={launchSettings?.launchStatus || 'pilot'} detail="Current programme stage" />
+        <ProfessionalMetric title="Available Rewards" value={rewardStats.total} detail="Badges, titles and unlockables" />
         <ProfessionalMetric title="Ready to Claim" value={rewardStats.claimable} detail="Based on your progress" highlight />
-        <ProfessionalMetric title="Submitted Claims" value={rewardStats.claimed} detail="rewardClaims" />
+        <ProfessionalMetric title="Unlocked Rewards" value={rewardStats.claimed} detail="Already claimed" />
         <ProfessionalMetric title="Locked Rewards" value={rewardStats.locked} detail="Still in progress" />
-        <ProfessionalMetric title="Launch Events" value={publicLaunchEvents.length} detail="publicLaunchEvents" />
+        <ProfessionalMetric title="Launch Events" value={publicLaunchEvents.length} detail="Upcoming activities" />
       </div>
 
       <div style={launchPanelStyle}>
         <div>
           <p style={{ ...styles.eyebrow, color: '#f4d28a' }}>Public launch</p>
           <h2 style={launchTitleStyle}>{launchSettings?.launchTitle || 'AfriQuest Pilot Launch'}</h2>
-          <p style={launchTextStyle}>{launchSettings?.launchMessage || 'Launch information will load from Firebase.'}</p>
+          <p style={launchTextStyle}>{launchSettings?.launchMessage || 'Launch information will load from the system.'}</p>
           <p style={launchSponsorStyle}>{launchSettings?.sponsorMessage || 'Sponsor-supported rewards remain subject to GRIT Lab Africa approval and availability.'}</p>
         </div>
 
@@ -172,7 +179,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
             {launchSettings?.allowRewardClaims ? 'Claims open' : 'Claims closed'}
           </Pill>
           <button type="button" onClick={handleCreateStarterData} style={secondaryButtonStyle}>
-            Create starter data
+            Refresh starter rewards
           </button>
         </div>
       </div>
@@ -201,7 +208,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
       </div>
 
       {loading ? (
-        <div style={emptyStateStyle}>Loading rewards from Firebase...</div>
+        <div style={emptyStateStyle}>Loading rewards from the system...</div>
       ) : filteredRewards.length === 0 ? (
         <div style={emptyStateStyle}>No rewards match your filters yet.</div>
       ) : (
@@ -229,6 +236,9 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
                 <div style={requirementBoxStyle}>
                   <RequirementProgress label="Completed cards" value={completedProblems} target={reward.requiredCompletedProblems} progress={completedProgress} />
                   <RequirementProgress label="Average score" value={`${averageScore}%`} target={`${reward.requiredAverageScore}%`} progress={averageProgress} />
+                  {reward.requiredCertificate && (
+                    <RequirementProgress label="Certificate" value={certificateUnlocked ? 'Unlocked' : 'Locked'} target="Unlocked" progress={certificateUnlocked ? 100 : 0} />
+                  )}
                 </div>
 
                 <button
@@ -237,7 +247,7 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
                   disabled={!canClaim || claimed}
                   style={canClaim && !claimed ? primaryButtonStyle : disabledButtonStyle}
                 >
-                  {claimed ? 'Claim submitted' : canClaim ? 'Claim reward' : 'Keep playing to unlock'}
+                  {claimed ? 'Reward unlocked' : canClaim ? 'Unlock reward' : 'Keep playing to unlock'}
                 </button>
               </article>
             )

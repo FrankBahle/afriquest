@@ -38,7 +38,7 @@ The admin journey includes a separate static admin login and admin dashboard int
 - AI card selection
 - Selected AI solution board
 - Explanation box with 100-word limit
-- DeepSeek scoring integration through the existing service file
+- AI scoring integration through the existing service file
 - Score and feedback screen
 - Detailed sub-score breakdown
 - Retry attempt screen
@@ -169,8 +169,8 @@ Do not use this static login for production. A real backend authentication syste
 - Vite
 - JavaScript
 - CSS / inline component styles
-- Firebase integration for existing app login flow
-- DeepSeek service integration for AI scoring
+- App data integration for the existing login flow
+- AI scoring service integration
 - Netlify-ready front-end routing
 
 ---
@@ -193,7 +193,7 @@ src/
 │   └── json/
 │       └── grit_lab_africa_problem_cards.json
 ├── services/
-│   └── deepseekService.js
+│   └── scoringService.js
 ├── components/
 │   ├── GameHome.jsx
 │   ├── AuthModal.jsx
@@ -277,10 +277,10 @@ A typical `netlify.toml` setup:
 
 ## Environment Variables
 
-The project uses a DeepSeek service file for AI scoring. Depending on how the service is configured, you may need an environment variable such as:
+The project uses an AI scoring service file. Depending on how the service is configured, you may need an environment variable such as:
 
 ```txt
-VITE_DEEPSEEK_API_KEY=your_api_key_here
+VITE_SCORING_API_KEY=your_api_key_here
 ```
 
 Create a `.env` file in the root of the project if needed:
@@ -292,7 +292,7 @@ Create a `.env` file in the root of the project if needed:
 Example:
 
 ```env
-VITE_DEEPSEEK_API_KEY=your_deepseek_key_here
+SCORING_API_KEY=your_scoring_key_here
 ```
 
 Do not commit real API keys to GitHub.
@@ -421,12 +421,12 @@ Add or confirm this in `netlify.toml`:
   status = 200
 ```
 
-### DeepSeek scoring does not work
+### AI scoring does not work
 
 Check:
 
 ```txt
-src/services/deepseekService.js
+src/services/scoringService.js
 ```
 
 Also confirm that your `.env` file contains the needed API key and that the key starts with `VITE_` if it is accessed in the Vite front end.

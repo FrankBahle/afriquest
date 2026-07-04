@@ -39,7 +39,7 @@ function AchievementsBadgesScreen({
       setAchievements(result.achievements)
       setAchievementStats(result.stats)
     } catch (err) {
-      setError(err.message || 'Could not load achievements from Firebase.')
+      setError(err.message || 'Could not load achievements from the system.')
     } finally {
       setLoading(false)
     }
@@ -88,7 +88,7 @@ function AchievementsBadgesScreen({
     return (
       <LoadingPage
         title="Loading achievements"
-        message="Syncing player badges and achievement progress from Firebase."
+        message="Syncing player badges and achievement progress from the system."
       />
     )
   }
@@ -99,7 +99,7 @@ function AchievementsBadgesScreen({
         eyebrow="Player achievements and badges"
         title="Track your AI for SDGs badges."
       >
-        Achievements are connected to Firebase using the achievements and
+        Achievements are connected to the system using the achievements and
         playerAchievements collections.
       </SectionHeader>
 
@@ -187,7 +187,7 @@ function AchievementsBadgesScreen({
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase playerAchievements collection</p>
+            <p style={styles.eyebrow}>the system playerAchievements collection</p>
             <h3 style={styles.smallCardTitle}>Achievement progress</h3>
           </div>
 
@@ -196,7 +196,7 @@ function AchievementsBadgesScreen({
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading achievements from Firebase...
+            Loading achievements from the system...
           </p>
         ) : filteredAchievements.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>

@@ -49,7 +49,7 @@ function CardImageManager() {
         setSelectedCardId(`${rows[0].cardType}:${rows[0].firestoreId}`)
       }
     } catch (err) {
-      setError(err.message || 'Could not load cards from Firebase.')
+      setError(err.message || 'Could not load cards from the system.')
     } finally {
       setLoading(false)
     }
@@ -95,8 +95,8 @@ function CardImageManager() {
         eyebrow="Admin card image upload"
         title="Upload and manage card images."
       >
-        Upload problem-card and AI-card images to Firebase Storage, then save
-        the image URL back into the selected Firebase card document.
+        Upload problem-card and AI-card images to secure file storage, then save
+        the image URL back into the selected the system card document.
       </SectionHeader>
 
       <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
@@ -179,7 +179,7 @@ function CardImageManager() {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase cards</p>
+            <p style={styles.eyebrow}>saved cards</p>
             <h3 style={styles.smallCardTitle}>Current card image status</h3>
           </div>
 
@@ -188,11 +188,11 @@ function CardImageManager() {
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading card image data from Firebase...
+            Loading card image data from the system...
           </p>
         ) : cards.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            No cards found in Firebase yet.
+            No cards found in the system yet.
           </p>
         ) : (
           <div style={tableWrapStyle}>
@@ -343,8 +343,8 @@ function CertificateTemplateManager() {
         eyebrow="Admin certificate template management"
         title="Manage certificate templates."
       >
-        Save certificate wording in Firebase appSettings and upload certificate
-        assets to Firebase Storage.
+        Save certificate wording in platform settings and upload certificate
+        assets to secure file storage.
       </SectionHeader>
 
       <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
@@ -460,7 +460,7 @@ function CertificateTemplateManager() {
             <h3 style={styles.smallCardTitle}>Upload logo, background and signature</h3>
           </div>
 
-          <Pill>Firebase Storage</Pill>
+          <Pill>secure file storage</Pill>
         </div>
 
         <div style={assetGridStyle}>

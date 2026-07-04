@@ -386,8 +386,8 @@ function normaliseEvaluation(parsed, userExplanation) {
   }
 }
 
-async function callthe scoring engine({ apiKey, model, prompt }) {
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
+async function callScoringEngine({ apiUrl, apiKey, model, prompt }) {
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -443,19 +443,20 @@ export async function handler(event) {
   }
 
   try {
-    const apiKey = process.env.DEEPSEEK_API_KEY
-    const requestedModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
+    const apiUrl = process.env.SCORING_API_URL
+    const apiKey = process.env.SCORING_API_KEY
+    const model = process.env.SCORING_MODEL || 'default'
 
-    const model = ['deepseek-v4-flash', 'deepseek-v4-pro'].includes(
-      requestedModel
-    )
-      ? requestedModel
-      : 'deepseek-v4-flash'
+    if (!apiUrl) {
+      return jsonResponse(500, {
+        error: 'The scoring engine address has not been configured. Add the scoring address in your environment variables.'
+      })
+    }
 
     if (!apiKey) {
       return jsonResponse(500, {
         error:
-          'the scoring engine API key has not been configured. Add DEEPSEEK_API_KEY in Netlify environment variables.'
+          'The scoring engine key has not been configured. Add the scoring key in your environment variables.'
       })
     }
 
@@ -587,17 +588,18 @@ Return exactly this JSON shape:
 `
 
     let content = ''
-    let deepseekError = ''
+    let scoringEngineError = ''
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const { response, data } = await callthe scoring engine({
+      const { response, data } = await callScoringEngine({
+        apiUrl,
         apiKey,
         model,
         prompt
       })
 
       if (!response.ok) {
-        deepseekError =
+        scoringEngineError =
           data?.error?.message ||
           data?.message ||
           'The scoring engine could not score the explanation right now.'
@@ -615,7 +617,7 @@ Return exactly this JSON shape:
     if (!content) {
       return jsonResponse(502, {
         error:
-          deepseekError ||
+          scoringEngineError ||
           'The scoring engine returned an empty response. Please try again in a few seconds.'
       })
     }

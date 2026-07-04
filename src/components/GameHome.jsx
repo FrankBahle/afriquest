@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { gradeExplanation } from '../services/deepseekService'
+import { gradeExplanation } from '../services/scoringService'
 import problemCards from '../assets/json/grit_lab_africa_problem_cards.json'
 import card1 from '../assets/images/card1.jpeg'
 import card2 from '../assets/images/card2.jpeg'
@@ -82,7 +82,7 @@ function normaliseAiResult(result) {
   return {
     totalScore,
     glaCoinEarned: toSafeNumber(result?.GLA_coin_earned || result?.glaCoinEarned || result?.gla_coin_earned || totalScore),
-    overallFeedback: result?.feedback?.overall || result?.overallFeedback || (typeof result?.feedback === 'string' ? result.feedback : '') || 'DeepSeek has reviewed the idea. Use the feedback to improve your solution.',
+    overallFeedback: result?.feedback?.overall || result?.overallFeedback || (typeof result?.feedback === 'string' ? result.feedback : '') || 'The scoring engine has reviewed the idea. Use the feedback to improve your solution.',
     improvement: result?.feedback?.improvement || result?.improvement || 'Make the explanation more specific about how the solution will work in real life.',
     subScores: result?.sub_scores || result?.subScores || {},
     areaFeedback: result?.feedback_by_area || result?.areaFeedback || result?.feedback?.by_area || {},
@@ -396,7 +396,7 @@ const coinTransaction = {
   type: 'earned',
   amount: savedAttempt.glaCoinEarned,
   balanceAfter,
-  reason: 'DeepSeek score reward',
+  reason: 'Scoring reward',
   problemId: round.card.id,
   problemTitle: round.card.title,
   createdAt
@@ -445,7 +445,7 @@ const coinTransaction = {
       await loadPlayerDashboard()
       setScreen('score')
     } catch (err) {
-      setAiError(err.message || 'DeepSeek could not score the explanation.')
+      setAiError(err.message || 'The scoring engine could not score the explanation.')
     } finally {
       setAiLoading(false)
     }
@@ -517,7 +517,7 @@ const coinTransaction = {
       await loadPlayerDashboard()
     } catch (error) {
       console.error(error)
-      setHintMessage(error.message || 'Could not save the hint transaction to Firebase.')
+      setHintMessage(error.message || 'Could not save the hint transaction to the system.')
     } finally {
       setShowHintConfirm(false)
     }
@@ -797,7 +797,7 @@ async function loadPlayerAnalytics() {
         {cardLoading && journeyActive && (
           <LoadingPage
             title="Loading game cards"
-            message="Fetching problem cards and AI cards from Firebase before you continue."
+            message="Fetching problem cards and AI cards from the system before you continue."
           />
         )}
 
@@ -806,22 +806,6 @@ async function loadPlayerAnalytics() {
             {cardError}
           </p>
         )}
-<button
-  type="button"
-  onClick={handleSeedMultiplayerRealtimeCollections}
-  style={{
-    marginBottom: '18px',
-    padding: '12px 18px',
-    borderRadius: '999px',
-    border: 'none',
-    cursor: 'pointer',
-    background: '#5c3512',
-    color: '#fff8eb',
-    fontWeight: 900
-  }}
->
-  Create Multiplayer Notification Collections
-</button>
 
 
 
@@ -918,7 +902,7 @@ averageScore={firestoreAverageScore}
         {screen === 'dashboard' && dashboardLoading && (
           <LoadingPage
             title="Loading dashboard"
-            message="Fetching your selected cards, completed problems, average score and wallet from Firebase."
+            message="Fetching your selected cards, completed problems, average score and wallet from the system."
           />
         )}
 
@@ -966,7 +950,7 @@ averageScore={firestoreAverageScore}
         {screen === 'certificate' && dashboardLoading && (
           <LoadingPage
             title="Loading certificate"
-            message="Checking certificate status and saved issue record from Firebase."
+            message="Checking certificate status and saved issue record from the system."
           />
         )}
 
@@ -989,7 +973,7 @@ averageScore={firestoreAverageScore}
         {screen === 'profile' && dashboardLoading && (
           <LoadingPage
             title="Loading profile"
-            message="Fetching your saved profile and progress from Firebase."
+            message="Fetching your saved profile and progress from the system."
           />
         )}
 
@@ -1059,7 +1043,7 @@ averageScore={firestoreAverageScore}
         {screen === 'analytics' && analyticsLoading && (
           <LoadingPage
             title="Loading analytics"
-            message="Calculating your gameplay analytics from Firebase attempts, scores and activity data."
+            message="Calculating your gameplay analytics from the system attempts, scores and activity data."
           />
         )}
 
@@ -1137,6 +1121,28 @@ const pageCss = `
   .glaCompactCards article, .glaCompactCards .smallCard { padding: 14px !important; }
   @media (max-width: 980px) { .glaJourneyTabs { grid-template-columns:repeat(2,minmax(0,1fr)); } .gameShell { grid-template-columns: 1fr !important; } }
   @media (max-width: 520px) { .glaGamePageHeader { align-items:flex-start; flex-direction:column; } .glaJourneyTabs { grid-template-columns:1fr; } }
+
+  @media (max-width: 760px) {
+    .glaGameContent { overflow-x:hidden; }
+    .glaGameContent > * { max-width:100%; }
+    .glaGameContent [style*="grid-template-columns"] { grid-template-columns:1fr !important; }
+    .glaGameContent [style*="display: flex"], .glaGameContent [style*="display:flex"] { flex-wrap:wrap !important; }
+    .glaGameContent button { max-width:100%; white-space:normal; }
+    .glaGameContent input, .glaGameContent textarea, .glaGameContent select { width:100% !important; max-width:100%; }
+    .glaGameContent table { min-width:620px; }
+    .glaGameContent img, .glaGameContent video { max-width:100%; height:auto; }
+    .glaSidebarDrawer { width:min(340px, 92vw); }
+  }
+  @media (max-width: 520px) {
+    .glaGameContent [style*="padding: 36px"], .glaGameContent [style*="padding:36px"] { padding:18px !important; border-radius:22px !important; }
+    .glaGameContent [style*="padding: 24px"], .glaGameContent [style*="padding:24px"] { padding:16px !important; border-radius:20px !important; }
+    .glaGameContent h1 { font-size:clamp(2rem, 12vw, 3rem) !important; }
+    .glaGameContent h2 { font-size:clamp(1.6rem, 9vw, 2.4rem) !important; }
+    .glaGameContent h3 { font-size:clamp(1.1rem, 7vw, 1.5rem) !important; }
+    .glaJourneyTabs { position:relative; top:auto; padding:8px; border-radius:20px; }
+    .glaMenuButton { width:100%; justify-content:center; }
+    .glaPageTitle { font-size:0.78rem; line-height:1.4; }
+  }
 `
 
 export default GameHome

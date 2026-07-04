@@ -19,7 +19,7 @@ function AdminPlayerAnalyticsScreen() {
       const rows = await getAdminPlayerAnalyticsRows()
       setPlayers(rows)
     } catch (err) {
-      setError(err.message || 'Could not load player analytics from Firebase.')
+      setError(err.message || 'Could not load player analytics from the system.')
     } finally {
       setLoading(false)
     }
@@ -57,7 +57,7 @@ function AdminPlayerAnalyticsScreen() {
   return (
     <div style={styles.panel}>
       <SectionHeader eyebrow="Admin player analytics" title="View player progress and certification activity.">
-        This page reads Firebase users, attempts, certificates, hintRequests and GLA coin transactions.
+        This page reads player records, attempts, certificates, hintRequests and GLA coin transactions.
       </SectionHeader>
 
       {error && (
@@ -103,14 +103,14 @@ function AdminPlayerAnalyticsScreen() {
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase users collection</p>
+            <p style={styles.eyebrow}>Player records</p>
             <h3 style={styles.smallCardTitle}>Player progress table</h3>
           </div>
           <Pill>{loading ? 'Loading...' : `${filteredPlayers.length} players`}</Pill>
         </div>
 
         {loading ? (
-          <p style={{ ...styles.smallCardText, marginTop: 16 }}>Loading player analytics from Firebase...</p>
+          <p style={{ ...styles.smallCardText, marginTop: 16 }}>Loading player analytics from the system...</p>
         ) : filteredPlayers.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>No players match your search and filters.</p>
         ) : (

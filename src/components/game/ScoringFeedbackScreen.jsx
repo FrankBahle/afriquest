@@ -100,7 +100,7 @@ function ScoringFeedbackScreen({ currentAttempt, currentProblemAttemptStats, gla
     return (
       <div style={styles.panel}>
         <SectionHeader eyebrow="Scoring and feedback" title="No score yet.">
-          Submit a solution first. DeepSeek feedback and the detailed sub-score breakdown will appear here.
+          Submit a solution first. AI feedback and the detailed sub-score breakdown will appear here.
         </SectionHeader>
         <div style={styles.centerButtonRow}><ActionButton onClick={onOpenDashboard}>Go to Dashboard</ActionButton></div>
       </div>
@@ -116,7 +116,7 @@ function ScoringFeedbackScreen({ currentAttempt, currentProblemAttemptStats, gla
 
   return (
     <div style={styles.panel}>
-      <SectionHeader eyebrow="Scoring and feedback" title="DeepSeek reviewed your solution.">
+      <SectionHeader eyebrow="Scoring and feedback" title="The scoring engine reviewed your solution.">
         This page follows the GRIT Lab Africa seven-part scoring rubric: relevance, combination, practicality, African context, SDGs, creativity, and responsible AI.
       </SectionHeader>
 
@@ -125,7 +125,7 @@ function ScoringFeedbackScreen({ currentAttempt, currentProblemAttemptStats, gla
         <div style={{ flex: 1, minWidth: '240px' }}>
           <p style={{ ...styles.eyebrow, color: colors.lightGold }}>{totalScore >= 75 ? 'Strong certification-level attempt' : totalScore >= 50 ? 'Good start, improve the details' : 'Needs more practical detail'}</p>
           <h2 style={scoreTitleStyle}>{glaCoinEarned} GLA coin earned</h2>
-          <p style={scoreTextStyle}>Current Firebase wallet balance: <strong>{glaCoinBalance || 0} GLA coin</strong></p>
+          <p style={scoreTextStyle}>Current Current wallet balance: <strong>{glaCoinBalance || 0} GLA coin</strong></p>
         </div>
         <div style={scoreMiniPanelStyle}>
           <span style={miniLabelStyle}>Rubric total</span>

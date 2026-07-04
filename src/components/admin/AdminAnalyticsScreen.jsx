@@ -19,7 +19,7 @@ function AdminAnalyticsScreen() {
       const data = await getAdminAnalyticsDashboardData()
       setAnalyticsData(data)
     } catch (err) {
-      setError(err.message || 'Could not load analytics dashboard from Firebase.')
+      setError(err.message || 'Could not load analytics dashboard from the system.')
     } finally {
       setLoading(false)
     }
@@ -115,7 +115,7 @@ function AdminAnalyticsScreen() {
           eyebrow="Analytics dashboard"
           title="Learning analytics and impact reporting."
         >
-          Loading analytics from Firebase...
+          Loading analytics from the system...
         </SectionHeader>
       </div>
     )
@@ -128,7 +128,7 @@ function AdminAnalyticsScreen() {
           eyebrow="Analytics dashboard"
           title="Learning analytics and impact reporting."
         >
-          Firebase analytics could not load.
+          platform analytics could not load.
         </SectionHeader>
 
         <div
@@ -154,7 +154,7 @@ function AdminAnalyticsScreen() {
         title="Learning analytics and impact reporting."
       >
         Includes registered players, active players, card usage, hints,
-        certificates, completion and replay metrics from Firebase.
+        certificates, completion and replay metrics from the system.
       </SectionHeader>
 
       <div style={{ ...styles.centerButtonRow, marginTop: 16 }}>
@@ -216,7 +216,7 @@ function AdminAnalyticsScreen() {
             <h3 style={styles.smallCardTitle}>Filter analytics tables</h3>
           </div>
 
-          <Pill>Firebase analytics</Pill>
+          <Pill>platform analytics</Pill>
         </div>
 
         <div style={filterGridStyle}>

@@ -18,7 +18,7 @@ function AdminDashboardScreen() {
     } catch (err) {
       setError(
         err.message ||
-          'Could not load admin dashboard data from Firebase.'
+          'Could not load admin dashboard data from the system.'
       )
     } finally {
       setLoading(false)
@@ -36,11 +36,11 @@ function AdminDashboardScreen() {
           eyebrow="Admin dashboard"
           title="GRIT Lab Africa administration overview."
         >
-          Loading dashboard data from Firebase...
+          Loading dashboard data from the system...
         </SectionHeader>
 
         <div style={{ ...styles.smallCard, marginTop: 18 }}>
-          <p style={styles.smallCardText}>Please wait while Firebase data loads.</p>
+          <p style={styles.smallCardText}>Please wait while platform data loads.</p>
         </div>
       </div>
     )
@@ -53,7 +53,7 @@ function AdminDashboardScreen() {
           eyebrow="Admin dashboard"
           title="GRIT Lab Africa administration overview."
         >
-          Firebase dashboard data could not load.
+          dashboard data could not load.
         </SectionHeader>
 
         <div style={{ ...styles.smallCard, marginTop: 18 }}>
@@ -72,7 +72,7 @@ function AdminDashboardScreen() {
         eyebrow="Admin dashboard"
         title="GRIT Lab Africa administration overview."
       >
-        Live overview from Firebase for content management, player activity,
+        Live overview from the system for content management, player activity,
         analytics and certification.
       </SectionHeader>
 
@@ -131,7 +131,7 @@ function AdminDashboardScreen() {
           <ProgressBar value={dashboardStats.completionRateValue} />
 
           <p style={{ ...styles.smallCardText, marginTop: 10 }}>
-            Calculated from Firebase users who have completed at least 10
+            Calculated from player records who have completed at least 10
             problem cards.
           </p>
         </div>
@@ -142,7 +142,7 @@ function AdminDashboardScreen() {
 
         {dashboardStats.recentPlayers.length === 0 ? (
           <p style={styles.smallCardText}>
-            No player activity found in Firebase yet.
+            No player activity found in the system yet.
           </p>
         ) : (
           <div style={styles.listGrid}>

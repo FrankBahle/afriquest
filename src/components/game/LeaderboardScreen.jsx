@@ -40,7 +40,7 @@ function LeaderboardScreen({
       const rows = await getPlayerLeaderboardRows(currentUser?.uid || '')
       setLeaderboardRows(rows)
     } catch (err) {
-      setError(err.message || 'Could not load leaderboard from Firebase.')
+      setError(err.message || 'Could not load leaderboard from the system.')
       setLeaderboardRows([])
     } finally {
       setLoading(false)
@@ -129,7 +129,7 @@ function LeaderboardScreen({
     return (
       <LoadingPage
         title="Loading leaderboard"
-        message="Preparing rankings from Firebase leaderboard and player progress data."
+        message="Preparing rankings from the system leaderboard and player progress data."
       />
     )
   }
@@ -140,7 +140,7 @@ function LeaderboardScreen({
         eyebrow="Player leaderboard"
         title="Compare progress with other players."
       >
-        The leaderboard is calculated from Firebase users, attempts,
+        The leaderboard is calculated from player records, attempts,
         glaCoinTransactions and certificates. No separate leaderboard collection
         is needed for now.
       </SectionHeader>
@@ -170,14 +170,14 @@ function LeaderboardScreen({
           <p style={styles.eyebrow}>Top Player</p>
           <h3 style={styles.smallCardTitle}>{topPlayer?.name || 'No players yet'}</h3>
           <p style={styles.smallCardText}>
-            {topPlayer ? `${topPlayer.overallPoints} overall points` : 'Waiting for Firebase data.'}
+            {topPlayer ? `${topPlayer.overallPoints} overall points` : 'Waiting for platform data.'}
           </p>
         </div>
 
         <div style={styles.smallCard}>
           <p style={styles.eyebrow}>Players Ranked</p>
           <h3 style={styles.smallCardTitle}>{sortedRows.length}</h3>
-          <p style={styles.smallCardText}>Player records loaded from Firebase.</p>
+          <p style={styles.smallCardText}>Player records loaded from the system.</p>
         </div>
 
         <div style={styles.smallCard}>
@@ -265,7 +265,7 @@ function LeaderboardScreen({
       <div style={{ ...styles.smallCard, marginTop: 18 }}>
         <div style={styles.rowBetween}>
           <div>
-            <p style={styles.eyebrow}>Firebase leaderboard data</p>
+            <p style={styles.eyebrow}>the system leaderboard data</p>
             <h3 style={styles.smallCardTitle}>Player ranking table</h3>
           </div>
 
@@ -274,7 +274,7 @@ function LeaderboardScreen({
 
         {loading ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
-            Loading leaderboard from Firebase...
+            Loading leaderboard from the system...
           </p>
         ) : filteredRows.length === 0 ? (
           <p style={{ ...styles.smallCardText, marginTop: 16 }}>
