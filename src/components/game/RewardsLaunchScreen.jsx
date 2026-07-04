@@ -149,7 +149,8 @@ function RewardsLaunchScreen({ completedProblems = 0, averageScore = 0, certific
 
         <div style={heroBadgeStyle}>
           <span>{certificateUnlocked ? '🎓' : '🎁'}</span>
-          <strong>{certificateUnlocked ? 'Certificate ready' : 'Keep playing'}</strong>
+          <strong>{certificateUnlocked ? 'Certificate ready' : 'Keep playing '}</strong>
+          <br/>
           <small>{completedProblems} completed • {averageScore}% average</small>
         </div>
       </div>

@@ -784,8 +784,8 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         <div className="mpHeroStatsWrap">
           <div className="mpHeroStats">
             <strong>{rooms.length}</strong>
-            <span>rooms</span>
-            <small>{unreadCount} unread</small>
+            <span>rooms </span>
+            
           </div>
 
           <div className="mpHeroStats live">
