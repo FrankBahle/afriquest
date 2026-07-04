@@ -165,7 +165,7 @@ function PlayerApp() {
               <div className="heroOverlay"></div>
 
               <div className="heroContentCard">
-                <p className="heroTag">GRIT Lab Africa AI Demo Project</p>
+                <p className="heroTag">GRIT Lab Africa AI Project</p>
 
                 <h2
                   style={{
@@ -198,20 +198,13 @@ function PlayerApp() {
 
                 <div style={entryCardsGridStyle}>
                   <button type="button" onClick={handleStartQuest} style={entryCardStyle}>
-                    <span style={entryCardIconStyle}>🎮</span>
                     <span>
                       <strong style={entryCardTitleStyle}>Player / Student</strong>
                       <span style={entryCardTextStyle}>Register or login to play the AI for SDGs card game.</span>
                     </span>
                   </button>
 
-                  <a href="/admin" style={{ ...entryCardStyle, textDecoration: 'none' }}>
-                    <span style={entryCardIconStyle}>🛡️</span>
-                    <span>
-                      <strong style={entryCardTitleStyle}>Admin Access</strong>
-                      <span style={entryCardTextStyle}>Open the admin login for card, rubric, language and analytics management.</span>
-                    </span>
-                  </a>
+                
                 </div>
               </div>
             </div>

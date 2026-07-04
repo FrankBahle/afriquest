@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { styles, colors } from './gameStyles'
 import { ActionButton, MetricCard } from './ui'
 
@@ -38,6 +39,14 @@ function PlayGameScreen({
   latestAttempt,
   onGoToSelection
 }) {
+
+  const [draggedAiCard, setDraggedAiCard] = useState(null)
+const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
+const [isOverSolutionBoard, setIsOverSolutionBoard] = useState(false)
+const [dropPulseCardId, setDropPulseCardId] = useState('')
+
+const problemCardCode = round?.card?.id ? `PC${round.card.id}` : 'PC'
+
   if (!round.card) {
     return (
       <div style={styles.panel}>
@@ -50,8 +59,76 @@ function PlayGameScreen({
     )
   }
 
+
+function createTransparentDragImage(event) {
+  const dragImage = document.createElement('div')
+  dragImage.style.position = 'absolute'
+  dragImage.style.top = '-9999px'
+  dragImage.style.left = '-9999px'
+  dragImage.style.width = '1px'
+  dragImage.style.height = '1px'
+  document.body.appendChild(dragImage)
+  event.dataTransfer.setDragImage(dragImage, 0, 0)
+  setTimeout(() => {
+    document.body.removeChild(dragImage)
+  }, 0)
+}
+
+function handleAiDragStart(event, card) {
+  if (hasSubmittedExplanation) return
+
+  onDragStart(event, card.id)
+  createTransparentDragImage(event)
+
+  event.dataTransfer.effectAllowed = 'copy'
+  setDraggedAiCard(card)
+  setDragPosition({ x: event.clientX, y: event.clientY })
+}
+
+function handleAiDragMove(event) {
+  if (!draggedAiCard) return
+  if (event.clientX === 0 && event.clientY === 0) return
+
+  setDragPosition({ x: event.clientX, y: event.clientY })
+}
+
+function handleAiDragEnd() {
+  setDraggedAiCard(null)
+  setIsOverSolutionBoard(false)
+}
+
+function handleSolutionDragOver(event) {
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
+  setIsOverSolutionBoard(true)
+
+  if (draggedAiCard && event.clientX !== 0 && event.clientY !== 0) {
+    setDragPosition({ x: event.clientX, y: event.clientY })
+  }
+}
+
+function handleSolutionDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    setIsOverSolutionBoard(false)
+  }
+}
+
+function handleSolutionDrop(event) {
+  event.preventDefault()
+
+  if (draggedAiCard) {
+    setDropPulseCardId(draggedAiCard.id)
+    setTimeout(() => setDropPulseCardId(''), 520)
+  }
+
+  onDrop(event)
+  setDraggedAiCard(null)
+  setIsOverSolutionBoard(false)
+}
+
   return (
     <section className="gameSection" style={{ width: '100%', margin: '0 auto' }}>
+      <style>{playGameMotionCss}</style>
       <div className="gameShell" style={gameShellStyle}>
         <div
           className="gameLeft"
@@ -80,29 +157,41 @@ function PlayGameScreen({
 
           <button onClick={onToggleProblemFlip} style={transparentCardButtonStyle} type="button">
             <div className="problemCardVisual" style={problemCardVisualStyle}>
-              <img src={flippedProblem ? card1 : card2} alt="Problem card design" style={cardImageStyle} />
               <div
                 style={{
-                  ...cardOverlayStyle,
-                  background: flippedProblem
-                    ? 'linear-gradient(135deg, rgba(3, 8, 20, 0.82), rgba(8, 22, 46, 0.74))'
-                    : 'linear-gradient(180deg, rgba(3, 8, 20, 0.08), rgba(3, 8, 20, 0.72))'
+                  ...problemCardFlipInnerStyle,
+                  transform: flippedProblem ? 'rotateY(180deg)' : 'rotateY(0deg)'
                 }}
-              ></div>
-              <div style={cardTextOverlayStyle}>
-                {flippedProblem ? (
-                  <>
-                    <p style={{ ...styles.eyebrow, color: colors.lightGold }}>Problem Card Back</p>
-                    <h3 style={largeCardTitleStyle}>GRIT Lab Africa</h3>
-                    <p style={largeCardTextStyle}>Click again to view the current problem card.</p>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ ...styles.eyebrow, color: colors.lightGold }}>{round.card.problem_type}</p>
-                    <h3 style={largeCardTitleStyle}>{round.card.title}</h3>
-                    <p style={largeCardTextStyle}>{round.card.problem}</p>
-                  </>
-                )}
+              >
+                <div style={problemCardFaceStyle}>
+                  <img src={card2} alt="Problem card cover" style={cardImageStyle} />
+                  <div style={coverOverlayStyle}></div>
+                  <div style={coverTopStyle}>
+                    <span style={problemCodeBadgeStyle}>{problemCardCode}</span>
+                    <span style={coverPillStyle}>Problem Card</span>
+                  </div>
+                  <div style={coverContentStyle}>
+                    <p style={{ ...styles.eyebrow, color: colors.lightGold }}>Current Problem</p>
+                    <h3 style={coverTitleStyle}>{round.card.title}</h3>
+                    <p style={coverTextStyle}>Click to reveal the full problem card.</p>
+                  </div>
+                </div>
+
+                <div style={{ ...problemCardFaceStyle, transform: 'rotateY(180deg)' }}>
+                  <div style={problemBackStyle}>
+                    <div style={coverTopStyle}>
+                      <span style={problemCodeBadgeStyle}>{problemCardCode}</span>
+                      <span style={coverPillStyle}>{round.card.problem_type}</span>
+                    </div>
+                    <div style={problemBackContentStyle}>
+                      <p style={{ ...styles.eyebrow, color: colors.lightGold }}>Problem Card Revealed</p>
+                      <h3 style={largeCardTitleStyle}>{round.card.title}</h3>
+                      <p style={largeCardTextStyle}>{round.card.problem}</p>
+                      <p style={largeCardQuestionStyle}>{round.card.think_about_it}</p>
+                      <p style={flipHelpStyle}>Click again to return to the cover.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </button>
@@ -135,35 +224,46 @@ function PlayGameScreen({
                   <div key={card.id} style={{ display: 'grid', gap: '8px' }}>
                     <button
                       type="button"
-                      draggable={!hasSubmittedExplanation}
-                      onDragStart={(event) => onDragStart(event, card.id)}
-                      onClick={() => onToggleAiCard(card)}
+                     draggable={!hasSubmittedExplanation}
+onDragStart={(event) => handleAiDragStart(event, card)}
+onDrag={(event) => handleAiDragMove(event)}
+onDragEnd={handleAiDragEnd}
+onClick={() => onToggleAiCard(card)}
+className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
                       aria-pressed={selected}
                       style={{
-                        ...aiCardStyle,
+                        ...aiCardSceneButtonStyle,
                         border: selected ? '2px solid rgba(154, 106, 34, 0.78)' : '1px solid rgba(139, 92, 40, 0.18)',
-                        background: selected
-                          ? 'linear-gradient(135deg, rgba(154, 106, 34, 0.92), rgba(92, 53, 18, 0.96))'
-                          : 'rgba(255, 255, 255, 0.68)',
-                        color: selected ? colors.cream : colors.dark
+                        boxShadow: selected ? '0 18px 40px rgba(80,52,20,0.22)' : '0 14px 30px rgba(80,52,20,0.1)'
                       }}
                     >
-                      {flipped ? (
-                        <>
-                          <p style={{ ...styles.eyebrow, color: selected ? colors.lightGold : colors.gold }}>AI Card Back</p>
-                          <h3 style={{ margin: 0 }}>GRIT Lab Africa</h3>
-                          <p style={{ margin: '10px 0 0', lineHeight: '1.5' }}>Golden AI capability card.</p>
-                        </>
-                      ) : (
-                        <>
-                          <p style={{ ...styles.eyebrow, color: selected ? colors.lightGold : colors.gold }}>{card.type}</p>
-                          <h3 style={{ margin: '0 0 8px', lineHeight: '1.2' }}>{card.title}</h3>
-                          <p style={{ margin: 0, lineHeight: '1.5' }}>{card.canDo}</p>
-                        </>
-                      )}
+                      <div
+                        style={{
+                          ...aiCardFlipInnerStyle,
+                          transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                        }}
+                      >
+                        <div style={aiCardFaceStyle}>
+                          <img src={card1} alt="AI card cover" style={cardImageStyle} />
+                          <div style={aiCoverOverlayStyle}></div>
+                          <div style={aiCoverContentStyle}>
+                            <p style={{ ...styles.eyebrow, color: colors.lightGold }}>AI Card</p>
+                            <h3 style={aiCoverCodeStyle}>AC{card.id}</h3>
+                            <p style={aiCoverTextStyle}>{selected ? 'Selected for your solution' : 'Click to select this AI card'}</p>
+                          </div>
+                        </div>
+
+                        <div style={{ ...aiCardFaceStyle, transform: 'rotateY(180deg)' }}>
+                          <div style={selected ? selectedAiBackStyle : aiBackStyle}>
+                            <p style={{ ...styles.eyebrow, color: selected ? colors.lightGold : colors.gold }}>{card.type}</p>
+                            <h3 style={{ margin: '0 0 8px', lineHeight: '1.2' }}>{card.title}</h3>
+                            <p style={{ margin: 0, lineHeight: '1.5' }}>{card.canDo}</p>
+                          </div>
+                        </div>
+                      </div>
                     </button>
                     <button type="button" onClick={() => onToggleAiFlip(card.id)} style={miniButtonStyle}>
-                      {flipped ? 'Show Front' : 'Flip Card'}
+                      {flipped ? 'Show Cover' : 'Flip Card'}
                     </button>
                   </div>
                 )
@@ -172,26 +272,44 @@ function PlayGameScreen({
           </div>
 
           <div
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={onDrop}
-            style={{
-              ...solutionBoardStyle,
-              background: selectedAiCards.length > 0
-                ? 'linear-gradient(135deg, rgba(255, 248, 235, 0.9), rgba(244, 210, 138, 0.42))'
-                : 'rgba(255, 255, 255, 0.7)'
-            }}
-          >
+  className={isOverSolutionBoard ? 'solutionBoardHover' : ''}
+  onDragOver={handleSolutionDragOver}
+  onDragEnter={handleSolutionDragOver}
+  onDragLeave={handleSolutionDragLeave}
+  onDrop={handleSolutionDrop}
+  style={{
+    ...solutionBoardStyle,
+    background: isOverSolutionBoard
+      ? 'linear-gradient(135deg, rgba(255, 248, 235, 0.98), rgba(244, 210, 138, 0.72))'
+      : selectedAiCards.length > 0
+        ? 'linear-gradient(135deg, rgba(255, 248, 235, 0.9), rgba(244, 210, 138, 0.42))'
+        : 'rgba(255, 255, 255, 0.7)',
+    border: isOverSolutionBoard
+      ? '2px solid rgba(154,106,34,0.72)'
+      : '2px dashed rgba(154,106,34,0.38)'
+  }}
+>
             <p style={styles.eyebrow}>Step 2</p>
             <h3 style={styles.smallCardTitle}>Selected AI solution cards.</h3>
             <div style={selectedAiGridStyle}>
               {selectedAiCards.length === 0 && <div style={emptyDropStyle}>Choose or drag up to 3 AI cards here.</div>}
-              {selectedAiCards.map((card) => (
-                <button key={card.id} type="button" onClick={() => onRemoveSelectedAiCard(card.id)} style={selectedAiCardStyle}>
-                  <p style={{ ...styles.eyebrow, color: colors.lightGold }}>Selected AI</p>
-                  <strong>{card.title}</strong>
-                  <p style={selectedAiTypeStyle}>{card.type}</p>
-                </button>
-              ))}
+             {selectedAiCards.map((card) => (
+  <button
+    key={card.id}
+    type="button"
+    onClick={() => onRemoveSelectedAiCard(card.id)}
+    className={dropPulseCardId === card.id ? 'selectedAiCardLanded' : ''}
+    style={selectedAiCardStyle}
+  >
+    <div style={selectedAiTopRowStyle}>
+      <span style={selectedAiCodeBadgeStyle}>AC{card.id}</span>
+      <span style={selectedAiTypePillStyle}>{card.type}</span>
+    </div>
+
+    <strong style={selectedAiTitleStyle}>{card.title}</strong>
+    <p style={selectedAiTypeStyle}>{card.canDo}</p>
+  </button>
+))}
             </div>
           </div>
 
@@ -249,6 +367,32 @@ function PlayGameScreen({
           </div>
         </div>
       </div>
+      {draggedAiCard && (
+        <div
+          className="dragCardPreview"
+          style={{
+            left: dragPosition.x,
+            top: dragPosition.y
+          }}
+        >
+          <div style={dragPreviewCardStyle}>
+            <img src={card1} alt="Dragging AI card" style={cardImageStyle} />
+            <div style={dragPreviewOverlayStyle}></div>
+            <div style={dragPreviewContentStyle}>
+              <div style={selectedAiTopRowStyle}>
+                <span style={selectedAiCodeBadgeStyle}>AC{draggedAiCard.id}</span>
+                <span style={dragPreviewPillStyle}>{draggedAiCard.type}</span>
+              </div>
+
+              <div>
+                <p style={{ ...styles.eyebrow, color: colors.lightGold }}>Dragging AI Card</p>
+                <h3 style={dragPreviewTitleStyle}>{draggedAiCard.title}</h3>
+                <p style={dragPreviewTextStyle}>{draggedAiCard.canDo}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -274,21 +418,264 @@ const promptTitleStyle = { margin: '0 0 12px', fontSize: '1.25rem', lineHeight: 
 const promptTextStyle = { margin: '0 0 12px', lineHeight: '1.6', color: 'rgba(255, 248, 235, 0.9)' }
 const promptQuestionStyle = { margin: '0', lineHeight: '1.6', color: colors.lightGold, fontWeight: '750' }
 const transparentCardButtonStyle = { width: '100%', border: '0', padding: '0', background: 'transparent', cursor: 'pointer', textAlign: 'left', marginTop: '20px' }
-const problemCardVisualStyle = { position: 'relative', minHeight: '510px', borderRadius: '30px', overflow: 'hidden', boxShadow: '0 28px 60px rgba(0,0,0,0.26)', transform: 'rotate(-1.5deg)' }
+
+const problemCardVisualStyle = {
+  position: 'relative',
+  minHeight: '510px',
+  perspective: '1200px',
+  borderRadius: '30px',
+  transform: 'rotate(-1.5deg)'
+}
+
+const problemCardFlipInnerStyle = {
+  position: 'relative',
+  width: '100%',
+  minHeight: '510px',
+  transformStyle: 'preserve-3d',
+  transition: 'transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+  borderRadius: '30px',
+  boxShadow: '0 28px 60px rgba(0,0,0,0.26)'
+}
+
+const problemCardFaceStyle = {
+  position: 'absolute',
+  inset: 0,
+  minHeight: '510px',
+  borderRadius: '30px',
+  overflow: 'hidden',
+  backfaceVisibility: 'hidden',
+  WebkitBackfaceVisibility: 'hidden'
+}
+
 const cardImageStyle = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }
-const cardOverlayStyle = { position: 'absolute', inset: 0 }
-const cardTextOverlayStyle = { position: 'absolute', left: '24px', right: '24px', bottom: '28px', color: colors.cream }
+const coverOverlayStyle = { position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(3, 8, 20, 0.08), rgba(3, 8, 20, 0.78))' }
+const coverTopStyle = { position: 'absolute', top: '22px', left: '22px', right: '22px', zIndex: 2, display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }
+const problemCodeBadgeStyle = { minWidth: 68, height: 68, borderRadius: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(244, 210, 138, 0.96), rgba(154, 106, 34, 0.94))', color: '#3b2817', fontWeight: 950, fontSize: '1.25rem', boxShadow: '0 18px 34px rgba(0,0,0,0.22)' }
+const coverPillStyle = { padding: '9px 13px', borderRadius: 999, background: 'rgba(255, 248, 235, 0.18)', border: '1px solid rgba(255, 248, 235, 0.28)', color: colors.cream, fontSize: '0.78rem', fontWeight: 900, backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }
+const coverContentStyle = { position: 'absolute', left: '24px', right: '24px', bottom: '28px', zIndex: 2, color: colors.cream }
+const coverTitleStyle = { margin: '0 0 12px', fontSize: '1.85rem', lineHeight: '1.08', letterSpacing: '-0.045em' }
+const coverTextStyle = { margin: 0, color: 'rgba(255,248,235,0.88)', lineHeight: 1.65, fontWeight: 750 }
+const problemBackStyle = { minHeight: '510px', padding: '112px 24px 28px', color: colors.cream, background: 'radial-gradient(circle at top left, rgba(244,210,138,0.22), transparent 34%), linear-gradient(135deg, rgba(3, 8, 20, 0.94), rgba(92, 53, 18, 0.96))' }
+const problemBackContentStyle = { display: 'grid', gap: '10px' }
 const largeCardTitleStyle = { margin: '0 0 12px', fontSize: '1.75rem', lineHeight: '1.1' }
 const largeCardTextStyle = { margin: '0', color: 'rgba(255,248,235,0.88)', lineHeight: '1.65' }
+const largeCardQuestionStyle = { margin: '0', color: colors.lightGold, lineHeight: '1.65', fontWeight: 800 }
+const flipHelpStyle = { margin: '6px 0 0', color: 'rgba(255,248,235,0.72)', fontSize: '0.88rem', fontWeight: 750 }
+
 const solutionBoardStyle = { padding: '24px', borderRadius: '28px', border: '2px dashed rgba(154,106,34,0.38)', boxShadow: '0 18px 42px rgba(80,52,20,0.12)' }
-const selectedAiGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginTop: '16px' }
+const selectedAiGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+  gap: '14px',
+  marginTop: '16px'
+}
 const emptyDropStyle = { padding: '18px', borderRadius: '20px', background: 'rgba(255,255,255,0.58)', color: colors.brown2, lineHeight: '1.55' }
-const selectedAiCardStyle = { padding: '16px', border: '1px solid rgba(154,106,34,0.3)', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(154,106,34,0.96), rgba(92,53,18,0.96))', color: colors.cream, textAlign: 'left', cursor: 'pointer' }
-const selectedAiTypeStyle = { margin: '8px 0 0', lineHeight: '1.5' }
+const selectedAiCardStyle = {
+  minHeight: '180px',
+  padding: '16px',
+  border: '1px solid rgba(154,106,34,0.3)',
+  borderRadius: '22px',
+  background: 'linear-gradient(135deg, rgba(154,106,34,0.98), rgba(92,53,18,0.98))',
+  color: colors.cream,
+  textAlign: 'left',
+  cursor: 'pointer',
+  display: 'grid',
+  alignContent: 'space-between',
+  gap: '12px',
+  boxShadow: '0 18px 42px rgba(80,52,20,0.2)'
+}
+const selectedAiTypeStyle = {
+  margin: 0,
+  lineHeight: '1.5',
+  color: 'rgba(255,248,235,0.86)',
+  fontSize: '0.9rem'
+}
 const textAreaStyle = { width: '100%', minHeight: '150px', marginTop: '14px', padding: '16px', borderRadius: '20px', resize: 'vertical', background: 'rgba(255,255,255,0.78)', color: colors.dark, outline: 'none', lineHeight: '1.6' }
 const hintBoxStyle = { marginTop: '18px', padding: '18px', borderRadius: '22px', background: 'rgba(244,210,138,0.24)', border: '1px solid rgba(154,106,34,0.22)' }
 const aiLibraryStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px', maxHeight: '620px', overflowY: 'auto', paddingRight: '6px', marginTop: '16px' }
-const aiCardStyle = { minHeight: '190px', padding: '16px', borderRadius: '22px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 14px 30px rgba(80,52,20,0.1)' }
+const selectedAiTopRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '10px'
+}
+
+const selectedAiCodeBadgeStyle = {
+  minWidth: 48,
+  height: 48,
+  borderRadius: 16,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'linear-gradient(135deg, rgba(244, 210, 138, 0.98), rgba(255, 248, 235, 0.9))',
+  color: '#3b2817',
+  fontWeight: 950,
+  boxShadow: '0 12px 26px rgba(0,0,0,0.18)'
+}
+
+const selectedAiTypePillStyle = {
+  padding: '7px 10px',
+  borderRadius: 999,
+  background: 'rgba(255,248,235,0.14)',
+  border: '1px solid rgba(255,248,235,0.22)',
+  color: colors.lightGold,
+  fontSize: '0.72rem',
+  fontWeight: 900
+}
+
+const selectedAiTitleStyle = {
+  fontSize: '1.05rem',
+  lineHeight: 1.18
+}
+
+const aiCardSceneButtonStyle = {
+  minHeight: '270px',
+  padding: 0,
+  borderRadius: '22px',
+  cursor: 'pointer',
+  textAlign: 'left',
+  background: 'transparent',
+  perspective: '1000px',
+  overflow: 'visible'
+}
+
+const aiCardFlipInnerStyle = {
+  position: 'relative',
+  width: '100%',
+  minHeight: '270px',
+  transformStyle: 'preserve-3d',
+  transition: 'transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+}
+
+const aiCardFaceStyle = {
+  position: 'absolute',
+  inset: 0,
+  minHeight: '270px',
+  borderRadius: '20px',
+  overflow: 'hidden',
+  backfaceVisibility: 'hidden',
+  WebkitBackfaceVisibility: 'hidden'
+}
+
+const aiCoverOverlayStyle = { position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(3, 8, 20, 0.04), rgba(3, 8, 20, 0.78))' }
+const aiCoverContentStyle = { position: 'absolute', inset: 0, padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', color: colors.cream, zIndex: 2 }
+const aiCoverCodeStyle = { margin: 0, fontSize: '2rem', lineHeight: 1, letterSpacing: '-0.05em' }
+const aiCoverTextStyle = { margin: 0, color: 'rgba(255,248,235,0.86)', lineHeight: 1.45, fontWeight: 800 }
+const aiBackStyle = { minHeight: '210px', padding: '16px', borderRadius: '20px', background: 'rgba(255, 255, 255, 0.82)', color: colors.dark, border: '1px solid rgba(139, 92, 40, 0.18)' }
+const selectedAiBackStyle = { minHeight: '210px', padding: '16px', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(154, 106, 34, 0.92), rgba(92, 53, 18, 0.96))', color: colors.cream, border: '1px solid rgba(244, 210, 138, 0.34)' }
 const miniButtonStyle = { border: '1px solid rgba(139,92,40,0.18)', borderRadius: '999px', padding: '8px 12px', cursor: 'pointer', background: 'rgba(255,255,255,0.65)', color: colors.brown, fontWeight: '800', fontSize: '0.82rem' }
+
+const dragPreviewCardStyle = {
+  position: 'relative',
+  width: 240,
+  minHeight: 300,
+  borderRadius: 24,
+  overflow: 'hidden',
+  background: 'linear-gradient(135deg, rgba(154,106,34,1), rgba(92,53,18,1))',
+  border: '2px solid rgba(244,210,138,0.72)',
+  boxShadow: '0 34px 80px rgba(0,0,0,0.38)'
+}
+
+const dragPreviewOverlayStyle = {
+  position: 'absolute',
+  inset: 0,
+  background: 'linear-gradient(180deg, rgba(3,8,20,0.08), rgba(3,8,20,0.84))'
+}
+
+const dragPreviewContentStyle = {
+  position: 'absolute',
+  inset: 0,
+  padding: 16,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'space-between',
+  color: colors.cream,
+  zIndex: 2
+}
+
+const dragPreviewPillStyle = {
+  padding: '7px 10px',
+  borderRadius: 999,
+  background: 'rgba(255,248,235,0.18)',
+  border: '1px solid rgba(255,248,235,0.26)',
+  color: colors.lightGold,
+  fontSize: '0.72rem',
+  fontWeight: 900
+}
+
+const dragPreviewTitleStyle = {
+  margin: '0 0 8px',
+  fontSize: '1.25rem',
+  lineHeight: 1.12,
+  letterSpacing: '-0.04em'
+}
+
+const dragPreviewTextStyle = {
+  margin: 0,
+  color: 'rgba(255,248,235,0.84)',
+  lineHeight: 1.45,
+  fontSize: '0.86rem'
+}
+
+const playGameMotionCss = `
+  .dragCardPreview {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    transform: translate(-50%, -50%) rotate(5deg) scale(1.04);
+    animation: dragCardLift 180ms ease-out forwards, dragCardFloat 900ms ease-in-out infinite alternate;
+    filter: drop-shadow(0 28px 38px rgba(0, 0, 0, 0.32));
+  }
+
+  .aiCardDraggingSource {
+    transform: scale(0.985) rotate(-1deg);
+    filter: saturate(1.08) brightness(1.02);
+  }
+
+  .solutionBoardHover {
+    transform: scale(1.012);
+    box-shadow: 0 26px 62px rgba(80, 52, 20, 0.22), inset 0 0 0 1px rgba(244, 210, 138, 0.34);
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .selectedAiCardLanded {
+    animation: cardLand 520ms cubic-bezier(0.2, 1.3, 0.35, 1);
+  }
+
+  @keyframes dragCardLift {
+    from {
+      transform: translate(-50%, -50%) rotate(0deg) scale(0.92);
+    }
+    to {
+      transform: translate(-50%, -50%) rotate(5deg) scale(1.04);
+    }
+  }
+
+  @keyframes dragCardFloat {
+    from {
+      margin-top: -2px;
+    }
+    to {
+      margin-top: 8px;
+    }
+  }
+
+  @keyframes cardLand {
+    0% {
+      transform: translateY(-34px) scale(1.08) rotate(4deg);
+      opacity: 0.55;
+    }
+    55% {
+      transform: translateY(8px) scale(0.98) rotate(-1deg);
+      opacity: 1;
+    }
+    78% {
+      transform: translateY(-4px) scale(1.015) rotate(0.5deg);
+    }
+    100% {
+      transform: translateY(0) scale(1) rotate(0deg);
+    }
+  }
+`
 
 export default PlayGameScreen
