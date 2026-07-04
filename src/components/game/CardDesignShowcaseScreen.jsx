@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { Pill, SectionHeader } from './ui'
+import { LoadingPage, Pill, SectionHeader } from './ui'
 import {
   equipPlayerCardSkin,
   getPlayerCardDesigns,
@@ -82,6 +82,15 @@ function CardDesignShowcaseScreen({ problemCardBack, aiCardBack }) {
       return matchesType && matchesImage && matchesSearch
     })
   }, [allCards, cardTypeFilter, imageFilter, searchTerm])
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading card designs"
+        message="Fetching available card skins and unlocked player designs from Firebase."
+      />
+    )
+  }
 
   return (
     <div style={styles.panel}>

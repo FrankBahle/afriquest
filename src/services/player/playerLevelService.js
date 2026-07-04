@@ -48,9 +48,22 @@ export async function getActivePlayerLevels() {
     .filter((row) => !isSchemaDocument(row))
     .map(normaliseLevel)
     .filter((level) => level.isActive)
-    .sort((a, b) => a.order - b.order || a.level - b.level)
 
-  return firebaseLevels.length > 0 ? firebaseLevels : PLAYER_LEVELS
+  const levelMap = new Map()
+
+  PLAYER_LEVELS.forEach((level, index) => {
+    const normalisedLevel = normaliseLevel(level, index)
+    levelMap.set(normalisedLevel.levelId, normalisedLevel)
+  })
+
+  firebaseLevels.forEach((level, index) => {
+    const current = levelMap.get(level.levelId) || {}
+    levelMap.set(level.levelId, normaliseLevel({ ...current, ...level }, index))
+  })
+
+  return Array.from(levelMap.values())
+    .filter((level) => level.isActive)
+    .sort((a, b) => a.order - b.order || a.level - b.level)
 }
 
 function getRequirementProgress(currentValue, requiredValue) {

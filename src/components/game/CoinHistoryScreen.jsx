@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { Pill, SectionHeader } from './ui'
+import { LoadingPage, Pill, SectionHeader } from './ui'
 import { syncPlayerWallet } from '../../services/player/playerWalletService'
 
 function CoinHistoryScreen({
@@ -110,6 +110,15 @@ function CoinHistoryScreen({
       return matchesSearch && matchesType && matchesAmount
     })
   }, [walletData.transactions, searchTerm, typeFilter, minimumAmount])
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading GLA coin wallet"
+        message="Fetching wallet balance and transaction history from Firebase."
+      />
+    )
+  }
 
   return (
     <div style={styles.panel}>

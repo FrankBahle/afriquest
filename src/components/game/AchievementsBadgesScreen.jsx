@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { Pill, SectionHeader } from './ui'
+import { LoadingPage, Pill, SectionHeader } from './ui'
 import { syncPlayerAchievements } from '../../services/player/playerAchievementService'
 
 function AchievementsBadgesScreen({
@@ -83,6 +83,15 @@ function AchievementsBadgesScreen({
 
   const unlockedCount = achievements.filter((achievement) => achievement.unlocked).length
   const lockedCount = achievements.length - unlockedCount
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading achievements"
+        message="Syncing player badges and achievement progress from Firebase."
+      />
+    )
+  }
 
   return (
     <div style={styles.panel}>

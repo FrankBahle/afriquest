@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { Pill, SectionHeader } from './ui'
+import { LoadingPage, Pill, SectionHeader } from './ui'
 import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
 import {
   createMultiplayerRoom,
@@ -217,6 +217,15 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
       {}
     )
   }, [rooms])
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading multiplayer arena"
+        message="Fetching live rooms, debate spaces and tournaments from Firebase."
+      />
+    )
+  }
 
   return (
     <div style={styles.panel}>

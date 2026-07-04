@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { Pill, SectionHeader } from './ui'
+import { LoadingPage, Pill, SectionHeader } from './ui'
 import {
   calculatePlayerLevelProgress,
   syncPlayerLevelProgress
@@ -22,9 +22,11 @@ function LevelsProgressionScreen({
   )
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   async function loadLevels() {
+    setLoading(true)
     setError('')
 
     try {
@@ -57,12 +59,23 @@ function LevelsProgressionScreen({
       })
 
       setLevelProgress(localProgress)
+    } finally {
+      setLoading(false)
     }
   }
 
   useEffect(() => {
     loadLevels()
   }, [currentUser?.uid, totalGlaCoinEarned, completedProblems, averageScore])
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading levels"
+        message="Checking locked and unlocked levels from Firebase."
+      />
+    )
+  }
 
   const filteredLevels = useMemo(() => {
     const cleanSearch = searchTerm.trim().toLowerCase()

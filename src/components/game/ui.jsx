@@ -141,6 +141,54 @@ export function Pill({ children, tone = 'default' }) {
   return <span style={{ ...styles.chip, ...toneStyle }}>{children}</span>
 }
 
+
+
+export function LoadingPage({ title = 'Loading data', message = 'Connecting to Firebase and preparing this page...', compact = false }) {
+  return (
+    <div
+      style={{
+        ...styles.panel,
+        minHeight: compact ? '220px' : 'min(520px, 70vh)',
+        display: 'grid',
+        placeItems: 'center',
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: '-40% -10% auto auto',
+          width: 260,
+          height: 260,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(244,210,138,0.42), rgba(154,106,34,0))'
+        }}
+      />
+      <style>{'@keyframes glaSpin { to { transform: rotate(360deg); } }'}</style>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 520 }}>
+        <div style={loadingSpinnerStyle} aria-hidden="true" />
+        <p style={{ ...styles.eyebrow, marginTop: 18 }}>Please wait</p>
+        <h2 style={{ ...styles.sectionTitle, fontSize: 'clamp(2rem, 4vw, 3.2rem)', marginBottom: 10 }}>
+          {title}
+        </h2>
+        <p style={{ ...styles.paragraph, fontWeight: 700 }}>{message}</p>
+      </div>
+    </div>
+  )
+}
+
+const loadingSpinnerStyle = {
+  width: 58,
+  height: 58,
+  margin: '0 auto',
+  borderRadius: '50%',
+  border: '6px solid rgba(154, 106, 34, 0.18)',
+  borderTopColor: colors.gold,
+  animation: 'glaSpin 0.85s linear infinite'
+}
+
 export function Toggle({ label, checked, onChange, description }) {
   return (
     <button

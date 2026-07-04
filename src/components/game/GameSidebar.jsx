@@ -17,7 +17,6 @@ function GameSidebar({ screen, onNavigate, onClose, selectedProblemCount = 0, co
       { id: 'analytics', label: t('analytics','Analytics'), icon: '📈', detail: latestAttempt ? 'Updated' : 'No score yet' }
     ]},
     { title: t('experience','Experience'), items: [
-      { id: 'multilingual', label: t('language','Language'), icon: '🌐', detail: 'English / French / isiZulu' },
       { id: 'accessibility', label: t('settings','Settings'), icon: '⚙️', detail: 'App settings' },
       { id: 'designs', label: t('cardDesigns','Card designs'), icon: '🖼️', detail: 'Firebase images' },
       { id: 'multiplayer', label: t('multiplayer','Multiplayer'), icon: '🎮', detail: 'Rooms' },

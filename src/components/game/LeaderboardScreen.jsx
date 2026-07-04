@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
-import { Pill, SectionHeader } from './ui'
+import { LoadingPage, Pill, SectionHeader } from './ui'
 import {
   getPlayerLeaderboardRows,
   syncCurrentPlayerLeaderboardProfile
@@ -124,6 +124,15 @@ function LeaderboardScreen({
   const currentPlayerRow = sortedRows.find((row) => row.isCurrentUser)
   const topPlayer = sortedRows[0] || null
   const certifiedCount = sortedRows.filter((row) => row.certificate === 'Issued').length
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading leaderboard"
+        message="Preparing rankings from Firebase leaderboard and player progress data."
+      />
+    )
+  }
 
   return (
     <div style={styles.panel}>

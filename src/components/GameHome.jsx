@@ -19,11 +19,11 @@ import AchievementsBadgesScreen from './game/AchievementsBadgesScreen'
 import LevelsProgressionScreen from './game/LevelsProgressionScreen'
 import LeaderboardScreen from './game/LeaderboardScreen'
 import AnalyticsDashboardScreen from './game/AnalyticsDashboardScreen'
-import MultilingualScreen from './game/MultilingualScreen'
 import AccessibilityScreen from './game/AccessibilityScreen'
 import CardDesignShowcaseScreen from './game/CardDesignShowcaseScreen'
 import MultiplayerHubScreen from './game/MultiplayerHubScreen'
 import RewardsLaunchScreen from './game/RewardsLaunchScreen'
+import { LoadingPage } from './game/ui'
 import { usePlayerLanguage } from '../hooks/usePlayerLanguage'
 import { DEFAULT_PLAYER_SETTINGS } from '../services/player/playerSettingsService'
 import {
@@ -36,6 +36,7 @@ import {
   refreshPlayerProgressFromAttempts
 } from '../services/player/playerJourneyService'
 import { getPlayerDashboardData } from '../services/player/playerDashboardService'
+import { getPlayerAnalyticsData } from '../services/player/playerAnalyticsService'
 import {
   ensurePlayerProfile,
   updatePlayerProfile
@@ -275,6 +276,7 @@ setActiveSessionId(sessionId)
 
   function handleSidebarNavigation(value) {
     if (value === 'journey') setScreen('intro')
+    else if (value === 'multilingual') setScreen('accessibility')
     else setScreen(value)
     setSidebarOpen(false)
   }
@@ -778,13 +780,14 @@ async function loadPlayerAnalytics() {
       </div>
 
       <main className="glaGameContent">
-        {cardLoading && (
-          <p style={{ color: '#5c3512', fontWeight: 800 }}>
-            Loading cards from Firestore...
-          </p>
+        {cardLoading && journeyActive && (
+          <LoadingPage
+            title="Loading game cards"
+            message="Fetching problem cards and AI cards from Firebase before you continue."
+          />
         )}
 
-        {cardError && (
+        {!cardLoading && cardError && (
           <p style={{ color: '#9a3412', fontWeight: 800 }}>
             {cardError}
           </p>
@@ -793,7 +796,7 @@ async function loadPlayerAnalytics() {
 
 
 
-        {journeyActive && (
+        {!cardLoading && journeyActive && (
           <JourneyTabs
             screen={screen}
             selectedProblemCount={selectedProblemIds.length}
@@ -803,14 +806,14 @@ async function loadPlayerAnalytics() {
           />
         )}
 
-        {screen === 'intro' && (
+        {!cardLoading && screen === 'intro' && (
           <GameGuideScreen
             firstName={firstName}
             onChooseProblems={() => setScreen('select')}
           />
         )}
 
-        {screen === 'select' && (
+        {!cardLoading && screen === 'select' && (
           <ProblemSelectionScreen
             cards={cards}
             selectedProblemIds={selectedProblemIds}
@@ -819,7 +822,7 @@ async function loadPlayerAnalytics() {
           />
         )}
 
-        {screen === 'play' && (
+        {!cardLoading && screen === 'play' && (
           <PlayGameScreen
             round={round}
             aiCards={availableAiCards}
@@ -860,7 +863,7 @@ averageScore={firestoreAverageScore}
           />
         )}
 
-        {screen === 'score' && (
+        {!cardLoading && screen === 'score' && (
           <ScoringFeedbackScreen
             currentAttempt={firestoreLatestAttempt}
             currentProblem={round.card}
@@ -883,14 +886,15 @@ averageScore={firestoreAverageScore}
           />
         )}
 
-        {screen === 'dashboard' && (
-          <>
-            {dashboardLoading && (
-              <p style={{ color: '#5c3512', fontWeight: 800 }}>
-                Loading dashboard data...
-              </p>
-            )}
+        {screen === 'dashboard' && dashboardLoading && (
+          <LoadingPage
+            title="Loading dashboard"
+            message="Fetching your selected cards, completed problems, average score and wallet from Firebase."
+          />
+        )}
 
+        {screen === 'dashboard' && !dashboardLoading && (
+          <>
             {dashboardError && (
               <p style={{ color: '#9a3412', fontWeight: 800 }}>
                 {dashboardError}
@@ -930,7 +934,14 @@ averageScore={firestoreAverageScore}
 />
         )}
 
-        {screen === 'certificate' && (
+        {screen === 'certificate' && dashboardLoading && (
+          <LoadingPage
+            title="Loading certificate"
+            message="Checking certificate status and saved issue record from Firebase."
+          />
+        )}
+
+        {screen === 'certificate' && !dashboardLoading && (
           <CertificateScreen
             fullName={firestoreFullName || fullName}
             completedProblems={dashboardData?.completedProblems ?? completedProblems}
@@ -946,14 +957,15 @@ averageScore={firestoreAverageScore}
           />
         )}
 
-        {screen === 'profile' && (
-          <>
-            {dashboardLoading && (
-              <p style={{ color: '#5c3512', fontWeight: 800 }}>
-                Loading profile data...
-              </p>
-            )}
+        {screen === 'profile' && dashboardLoading && (
+          <LoadingPage
+            title="Loading profile"
+            message="Fetching your saved profile and progress from Firebase."
+          />
+        )}
 
+        {screen === 'profile' && !dashboardLoading && (
+          <>
             {dashboardError && (
               <p style={{ color: '#9a3412', fontWeight: 800 }}>
                 {dashboardError}
@@ -1015,14 +1027,15 @@ averageScore={firestoreAverageScore}
 />
         )}
 
-        {screen === 'analytics' && (
-          <>
-            {analyticsLoading && (
-              <p style={{ color: '#5c3512', fontWeight: 800 }}>
-                Loading analytics data...
-              </p>
-            )}
+        {screen === 'analytics' && analyticsLoading && (
+          <LoadingPage
+            title="Loading analytics"
+            message="Calculating your gameplay analytics from Firebase attempts, scores and activity data."
+          />
+        )}
 
+        {screen === 'analytics' && !analyticsLoading && (
+          <>
             {analyticsError && (
               <p style={{ color: '#9a3412', fontWeight: 800 }}>
                 {analyticsError}
@@ -1033,7 +1046,6 @@ averageScore={firestoreAverageScore}
           </>
         )}
 
-        {screen === 'multilingual' && <MultilingualScreen />}
 
         {screen === 'accessibility' && (
           <AccessibilityScreen
