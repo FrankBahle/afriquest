@@ -386,7 +386,7 @@ function normaliseEvaluation(parsed, userExplanation) {
   }
 }
 
-async function callthe scoring engine({ apiKey, model, prompt }) {
+async function callScoringengine({ apiKey, model, prompt }) {
   const response = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
@@ -590,7 +590,7 @@ Return exactly this JSON shape:
     let deepseekError = ''
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const { response, data } = await callthe scoring engine({
+      const { response, data } = await callScoringengine({
         apiKey,
         model,
         prompt
