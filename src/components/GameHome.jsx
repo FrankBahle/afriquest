@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { gradeExplanation } from '../services/scoringService'
 import problemCards from '../assets/json/grit_lab_africa_problem_cards.json'
 import card1 from '../assets/images/card1.jpeg'
-import card2 from '../assets/images/card2.jpeg'
+
 import { aiCards } from '../data/aiCards'
 import GameSidebar from './game/GameSidebar'
 import JourneyTabs from './game/JourneyTabs'
@@ -43,9 +43,28 @@ import {
 } from '../services/player/playerProfileService'
 import { seedRemainingCollections } from '../utils/seedRemainingCollections'
 import { seedMultiplayerRealtimeCollections } from '../utils/seedMultiplayerRealtimeCollections'
+import { resetAndSeedAiCards } from '../utils/resetAndSeedAiCards'
+
+const card2 = "/assets/images/AI_1.png"
 function createRound(cards) {
   if (!cards.length) return { card: null }
   return { card: cards[Math.floor(Math.random() * cards.length)] }
+}
+
+
+
+async function handleResetAndSeedAiCards() {
+  const confirmed = window.confirm('This will delete all existing AI cards and insert AI cards 1 to 30. Continue?')
+
+  if (!confirmed) return
+
+  try {
+    const result = await resetAndSeedAiCards()
+    alert(`AI cards reset complete. Deleted: ${result.deletedCount}. Inserted: ${result.insertedCount}.`)
+  } catch (error) {
+    console.error(error)
+    alert(error.message || 'Could not reset and seed AI cards.')
+  }
 }
 
 async function handleSeedRemainingCollections() {
@@ -110,14 +129,19 @@ function normaliseProblemCard(card) {
 }
 
 function normaliseAiCard(card) {
+  const id = Number(card.id)
+
   return {
     ...card,
-    id: Number(card.id),
+    id,
     title: card.title || '',
-    type: card.type || card.ai_type || '',
-    canDo: card.canDo || card.what_it_can_do || '',
+    type: card.type || card.aiType || card.ai_type || card.subtitle || '',
+    canDo: card.canDo || card.whatThisAiCanDo || card.what_it_can_do || '',
     examples: card.examples || [],
-    question: card.question || card.think_about_it || ''
+    question: card.question || card.thinkAboutIt || card.think_about_it || '',
+    frontImageUrl: card.frontImageUrl || `/assets/images/AI_${id}.png`,
+    backImageUrl: card.backImageUrl || `/assets/images/AI_${id}.png`,
+    fileName: card.fileName || `AI_${id}.png`
   }
 }
 
@@ -808,6 +832,22 @@ async function loadPlayerAnalytics() {
         )}
 
 
+<button
+  type="button"
+  onClick={handleResetAndSeedAiCards}
+  style={{
+    marginBottom: '18px',
+    padding: '12px 18px',
+    borderRadius: '999px',
+    border: 'none',
+    cursor: 'pointer',
+    background: '#5c3512',
+    color: '#fff8eb',
+    fontWeight: 900
+  }}
+>
+  Reset and Seed AI Cards
+</button>
 
         {!cardLoading && journeyActive && (
           <JourneyTabs

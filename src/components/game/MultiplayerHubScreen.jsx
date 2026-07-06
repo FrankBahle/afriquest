@@ -791,7 +791,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           <div className="mpHeroStats live">
             <span className="mpLivePulse"></span>
             <strong>{livePlayerCount}</strong>
-            <span>live players</span>
+            <span>live players </span>
             <small>currently online</small>
           </div>
         </div>

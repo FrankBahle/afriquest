@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { styles } from './gameStyles'
 import { ActionButton, MetricCard, Pill, SectionHeader } from './ui'
-import card2 from '../../assets/images/card2.jpeg'
+import card1 from '../../assets/images/card1.jpeg'
 
 function ProblemSelectionScreen({ cards, selectedProblemIds, onToggleProblem, onStartGame }) {
   const [flippedCardIds, setFlippedCardIds] = useState([])
@@ -87,7 +87,7 @@ function ProblemSelectionScreen({ cards, selectedProblemIds, onToggleProblem, on
                     boxShadow: selected ? '0 22px 48px rgba(80, 52, 20, 0.22)' : '0 12px 28px rgba(80, 52, 20, 0.08)'
                   }}
                 >
-                  <img src={card2} alt="Problem card cover" style={coverImageStyle} />
+                  <img src={card1} alt="Problem card cover" style={coverImageStyle} />
                   <div style={coverOverlayStyle}></div>
 
                   <div style={coverContentStyle}>

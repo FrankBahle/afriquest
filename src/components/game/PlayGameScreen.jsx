@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { styles, colors } from './gameStyles'
 import { ActionButton, MetricCard } from './ui'
 
+
 function PlayGameScreen({
   round,
   aiCards,
@@ -17,7 +18,7 @@ function PlayGameScreen({
   hintMessage,
   showHintConfirm,
   glaCoinBalance,
-  certificationProgress,
+  certificationProgress, 
   averageScore,
   fullName,
   card1,
@@ -46,6 +47,16 @@ const [isOverSolutionBoard, setIsOverSolutionBoard] = useState(false)
 const [dropPulseCardId, setDropPulseCardId] = useState('')
 
 const problemCardCode = round?.card?.id ? `PC${round.card.id}` : 'PC'
+
+
+function getAiCardImage(card) {
+  if (card?.frontImageUrl) return card.frontImageUrl
+  if (card?.backImageUrl) return card.backImageUrl
+  if (card?.fileName) return `/assets/images/${card.fileName}`
+  if (card?.id) return `/assets/images/AI_${card.id}.png`
+
+  return card1
+}
 
   if (!round.card) {
     return (
@@ -164,8 +175,7 @@ function handleSolutionDrop(event) {
                 }}
               >
                 <div style={problemCardFaceStyle}>
-                  <img src={card2} alt="Problem card cover" style={cardImageStyle} />
-                  <div style={coverOverlayStyle}></div>
+<img src={card1} alt="Problem card cover" style={cardImageStyle} />              <div style={coverOverlayStyle}></div>
                   <div style={coverTopStyle}>
                     <span style={problemCodeBadgeStyle}>{problemCardCode}</span>
                     <span style={coverPillStyle}>Problem Card</span>
@@ -244,8 +254,11 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
                         }}
                       >
                         <div style={aiCardFaceStyle}>
-                          <img src={card1} alt="AI card cover" style={cardImageStyle} />
-                          <div style={aiCoverOverlayStyle}></div>
+<img
+  src={card.frontImageUrl || card.backImageUrl || `/assets/images/AI_${card.id}.png` || card1}
+  alt={card.title}
+  style={cardImageStyle}
+/>                          <div style={aiCoverOverlayStyle}></div>
                           <div style={aiCoverContentStyle}>
                             <p style={{ ...styles.eyebrow, color: colors.lightGold }}>AI Card</p>
                             <h3 style={aiCoverCodeStyle}>AC{card.id}</h3>
@@ -376,9 +389,11 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
           }}
         >
           <div style={dragPreviewCardStyle}>
-            <img src={card1} alt="Dragging AI card" style={cardImageStyle} />
-            <div style={dragPreviewOverlayStyle}></div>
-            <div style={dragPreviewContentStyle}>
+<img
+  src={getAiCardImage(draggedAiCard)}
+  alt={draggedAiCard.title}
+  style={cardImageStyle}
+/>           <div style={dragPreviewContentStyle}>
               <div style={selectedAiTopRowStyle}>
                 <span style={selectedAiCodeBadgeStyle}>AC{draggedAiCard.id}</span>
                 <span style={dragPreviewPillStyle}>{draggedAiCard.type}</span>
@@ -440,7 +455,7 @@ const problemCardFlipInnerStyle = {
 const problemCardFaceStyle = {
   position: 'absolute',
   inset: 0,
-  minHeight: '510px',
+  minHeight: '550px',
   borderRadius: '30px',
   overflow: 'hidden',
   backfaceVisibility: 'hidden',
@@ -529,7 +544,7 @@ const selectedAiTitleStyle = {
 }
 
 const aiCardSceneButtonStyle = {
-  minHeight: '270px',
+minHeight: '380px',
   padding: 0,
   borderRadius: '22px',
   cursor: 'pointer',
@@ -542,7 +557,7 @@ const aiCardSceneButtonStyle = {
 const aiCardFlipInnerStyle = {
   position: 'relative',
   width: '100%',
-  minHeight: '270px',
+minHeight: '380px',
   transformStyle: 'preserve-3d',
   transition: 'transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1)'
 }
@@ -550,7 +565,7 @@ const aiCardFlipInnerStyle = {
 const aiCardFaceStyle = {
   position: 'absolute',
   inset: 0,
-  minHeight: '270px',
+minHeight: '380px',
   borderRadius: '20px',
   overflow: 'hidden',
   backfaceVisibility: 'hidden',
