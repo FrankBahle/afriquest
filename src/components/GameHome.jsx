@@ -832,22 +832,7 @@ async function loadPlayerAnalytics() {
         )}
 
 
-<button
-  type="button"
-  onClick={handleResetAndSeedAiCards}
-  style={{
-    marginBottom: '18px',
-    padding: '12px 18px',
-    borderRadius: '999px',
-    border: 'none',
-    cursor: 'pointer',
-    background: '#5c3512',
-    color: '#fff8eb',
-    fontWeight: 900
-  }}
->
-  Reset and Seed AI Cards
-</button>
+
 
         {!cardLoading && journeyActive && (
           <JourneyTabs
