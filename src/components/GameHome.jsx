@@ -24,7 +24,7 @@ import MultiplayerHubScreen from './game/MultiplayerHubScreen'
 import RewardsLaunchScreen from './game/RewardsLaunchScreen'
 import { LoadingPage } from './game/ui'
 import { usePlayerLanguage } from '../hooks/usePlayerLanguage'
-import { DEFAULT_PLAYER_SETTINGS } from '../services/player/playerSettingsService'
+import { DEFAULT_PLAYER_SETTINGS, getPlayerSettings, applyPlayerSettingsToDocument } from '../services/player/playerSettingsService'
 import {
   createSelectedProblemStack,
   getActiveAiCards,
@@ -183,6 +183,24 @@ function GameHome({ currentUser }) {
   const fullName = useMemo(() => currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Player', [currentUser])
   const firstName = fullName.split(' ')[0]
   const email = currentUser?.email || ''
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadSavedSettings() {
+      const savedSettings = await getPlayerSettings(currentUser?.uid)
+      if (!isMounted) return
+      setAccessibilitySettings(savedSettings)
+      applyPlayerSettingsToDocument(savedSettings)
+    }
+
+    loadSavedSettings()
+
+    return () => {
+      isMounted = false
+    }
+  }, [currentUser?.uid])
+
   const activeProblemStack = cards.filter((card) => selectedProblemIds.includes(card.id))
   const wordCount = countWords(userExplanation)
   const explanationTooLong = wordCount > 100
@@ -546,8 +564,15 @@ const coinTransaction = {
     }
   }
 
-  function updateAccessibilitySetting(key, value) {
-    setAccessibilitySettings((previous) => ({ ...previous, [key]: value }))
+  function updateAccessibilitySetting(nextOrKey, value) {
+    setAccessibilitySettings((previous) => {
+      const next = typeof nextOrKey === 'object' && nextOrKey !== null
+        ? { ...previous, ...nextOrKey }
+        : { ...previous, [nextOrKey]: value }
+
+      applyPlayerSettingsToDocument(next)
+      return next
+    })
   }
 
 
@@ -583,6 +608,12 @@ useEffect(() => {
   function handleSettingsSaved(nextSettings) {
     setAccessibilitySettings(nextSettings)
   }
+
+  useEffect(() => {
+    if (sidebarOpen && currentUser?.uid) {
+      loadPlayerDashboard()
+    }
+  }, [sidebarOpen, currentUser?.uid])
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow
@@ -802,10 +833,11 @@ async function loadPlayerAnalytics() {
 
         <div className="glaSidebarDrawer">
           <GameSidebar
+            userId={currentUser?.uid || ''}
             screen={screen}
             onNavigate={handleSidebarNavigation}
             onClose={() => setSidebarOpen(false)}
-            selectedProblemCount={selectedProblemIds.length}
+            selectedProblemCount={firestoreSelectedProblemStack.length || selectedProblemIds.length}
             completedProblems={firestoreCompletedProblems}
             certificationProgress={firestoreCertificationProgress}
             averageScore={firestoreAverageScore}
@@ -1132,7 +1164,11 @@ const pageCss = `
   .glaHighContrast { filter: contrast(1.08); }
   .glaLargeText { font-size: 1.08rem; }
   .glaReduceMotion *, .glaReduceMotion *::before, .glaReduceMotion *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
-  .glaLowBandwidth img, .glaHideCardImages img { filter: saturate(0.75); }
+  html[data-gla-large-text="true"] .glaGameContent, html[data-gla-large-text="true"] .adminContent { font-size: 1.08rem; }
+  html[data-gla-high-contrast="true"] .glaGameContent, html[data-gla-high-contrast="true"] .adminContent { filter: contrast(1.08); }
+  html[data-gla-reduce-motion="true"] *, html[data-gla-reduce-motion="true"] *::before, html[data-gla-reduce-motion="true"] *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  html[data-gla-keyboard-mode="true"] button:focus-visible, html[data-gla-keyboard-mode="true"] a:focus-visible, html[data-gla-keyboard-mode="true"] input:focus-visible, html[data-gla-keyboard-mode="true"] textarea:focus-visible, html[data-gla-keyboard-mode="true"] select:focus-visible { outline: 4px solid rgba(154,106,34,0.62) !important; outline-offset: 3px !important; }
+  .glaLowBandwidth img, .glaHideCardImages img, html[data-gla-low-bandwidth="true"] img, html[data-gla-show-card-images="false"] img { filter: saturate(0.75); }
   .glaCompactCards article, .glaCompactCards .smallCard { padding: 14px !important; }
   @media (max-width: 980px) { .glaJourneyTabs { grid-template-columns:repeat(2,minmax(0,1fr)); } .gameShell { grid-template-columns: 1fr !important; } }
   @media (max-width: 520px) { .glaGamePageHeader { align-items:flex-start; flex-direction:column; } .glaJourneyTabs { grid-template-columns:1fr; } }

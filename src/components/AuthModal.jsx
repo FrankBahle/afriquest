@@ -102,7 +102,7 @@ function AuthModal({ onClose, initialMode = 'login' }) {
   const description = isResettingPassword
     ? 'Enter your email address and we will send you a secure password reset link.'
     : isRegistering
-      ? 'Register to start playing the AfriQuest challenge demo.'
+      ? 'Register to start playing the AfriQuest challenge.'
       : 'Log in to continue your AfriQuest challenge journey.'
 
   return (

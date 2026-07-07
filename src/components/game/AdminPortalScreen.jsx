@@ -12,13 +12,13 @@ function AdminPortalScreen({ cards, attempts, selectedProblemStack, certificateU
   if (!unlocked) {
     return (
       <div style={styles.panel}>
-        <SectionHeader eyebrow="Admin login / access" title="GRIT Lab Africa admin access.">
-          UI-only access screen. No backend authentication is connected here.
+        <SectionHeader eyebrow="Admin access" title="GRIT Lab Africa admin access.">
+          Enter your administrator access code to continue.
         </SectionHeader>
         <div style={{ ...styles.smallCard, maxWidth: 520 }}>
-          <h3 style={styles.smallCardTitle}>Enter demo admin code</h3>
-          <input value={accessCode} onChange={(event) => setAccessCode(event.target.value)} placeholder="Type admin-demo" style={inputStyle} />
-          <div style={styles.centerButtonRow}><ActionButton onClick={() => setUnlocked(true)}>Open Admin Portal</ActionButton><ActionButton variant="secondary" onClick={() => setAccessCode('admin-demo')}>Fill Demo Code</ActionButton></div>
+          <h3 style={styles.smallCardTitle}>Enter admin access code</h3>
+          <input value={accessCode} onChange={(event) => setAccessCode(event.target.value)} placeholder="Enter access code" style={inputStyle} />
+          <div style={styles.centerButtonRow}><ActionButton onClick={() => setUnlocked(true)}>Open Admin Portal</ActionButton></div>
         </div>
       </div>
     )

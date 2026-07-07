@@ -153,7 +153,7 @@ function PlayerApp() {
   </Suspense>
 ) : (
         <>
-          <section className="heroArea" id="about">
+          <section className="heroArea" id="home">
             <div className="heroMediaCard">
               <img
   key={currentMedia.src}
@@ -193,12 +193,14 @@ function PlayerApp() {
                     Start Quest
                   </button>
 
-                  <button className="glassButton">Explore Project</button>
+                  <button type="button" onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })} className="glassButton">Explore Project</button>
                 </div>
 
               </div>
             </div>
           </section>
+
+          <AboutProjectSection onStartQuest={handleStartQuest} />
 
           <section
             id="contact"
@@ -451,6 +453,253 @@ function PlayerApp() {
   )
 }
 
+
+
+function AboutProjectSection({ onStartQuest }) {
+  const featureCards = [
+    {
+      title: 'Problem cards',
+      text: 'Players work with real African challenges such as unemployment, healthcare access, illegal dumping, food insecurity, transport and public safety.',
+      icon: '🧩'
+    },
+    {
+      title: 'Solution cards',
+      text: 'Players choose smart technology capabilities and explain how those tools can reduce or solve the selected problem.',
+      icon: '💡'
+    },
+    {
+      title: 'Learning rewards',
+      text: 'Scores become GLA coin, hints support learning, and certificate progress rewards consistent improvement.',
+      icon: '🏅'
+    }
+  ]
+
+  const learningPoints = [
+    'Build AI literacy without making the game too technical.',
+    'Connect the Sustainable Development Goals to local African realities.',
+    'Encourage ethical, practical and inclusive problem-solving.',
+    'Support learners, students, entrepreneurs, teachers and community innovators.'
+  ]
+
+  return (
+    <section id="about" style={aboutSectionStyle}>
+      <div style={aboutShellStyle}>
+        <div style={aboutHeaderGridStyle}>
+          <div>
+            <p style={aboutEyebrowStyle}>About the project</p>
+            <h2 style={aboutTitleStyle}>Gaming SDG problems and ideating solutions for Africa.</h2>
+            <p style={aboutLeadStyle}>
+              AfriQuest is a GRIT Lab Africa learning game where players use solution cards to respond to African problem cards linked to the Sustainable Development Goals. The goal is to help players think like innovators: understand the problem, choose relevant technology tools, explain a realistic solution and learn from guided feedback.
+            </p>
+          </div>
+
+          <div style={aboutHighlightStyle}>
+            <span style={aboutHighlightNumberStyle}>10+</span>
+            <strong>problem cards completed</strong>
+            <p>
+              A player works toward certificate readiness by completing at least ten problem cards and keeping a strong average score.
+            </p>
+          </div>
+        </div>
+
+        <div style={aboutFeatureGridStyle}>
+          {featureCards.map((item) => (
+            <article key={item.title} style={aboutFeatureCardStyle}>
+              <span style={aboutIconStyle}>{item.icon}</span>
+              <h3 style={aboutCardTitleStyle}>{item.title}</h3>
+              <p style={aboutCardTextStyle}>{item.text}</p>
+            </article>
+          ))}
+        </div>
+
+        <div style={aboutLowerGridStyle}>
+          <div style={aboutDarkCardStyle}>
+            <p style={aboutDarkEyebrowStyle}>How the game works</p>
+            <ol style={aboutStepsStyle}>
+              <li>Select problem cards that match your interests or community concerns.</li>
+              <li>Use up to three solution cards to build a focused response.</li>
+              <li>Write a clear explanation in one hundred words or less.</li>
+              <li>Submit your answer, review your score and improve through feedback.</li>
+            </ol>
+          </div>
+
+          <div style={aboutLightCardStyle}>
+            <p style={aboutEyebrowStyle}>Educational purpose</p>
+            <ul style={aboutListStyle}>
+              {learningPoints.map((point) => <li key={point}>{point}</li>)}
+            </ul>
+            <button type="button" onClick={onStartQuest} style={aboutCtaStyle}>Start learning</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+
+const aboutSectionStyle = {
+  width: 'min(1250px, calc(100vw - 48px))',
+  margin: '60px auto 0'
+}
+
+const aboutShellStyle = {
+  padding: 'clamp(26px, 5vw, 56px)',
+  borderRadius: '36px',
+  background: 'linear-gradient(135deg, rgba(255, 248, 235, 0.92), rgba(244, 210, 138, 0.36))',
+  border: '1px solid rgba(139, 92, 40, 0.2)',
+  boxShadow: '0 28px 70px rgba(80, 52, 20, 0.16)',
+  backdropFilter: 'blur(18px)',
+  WebkitBackdropFilter: 'blur(18px)'
+}
+
+const aboutHeaderGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
+  gap: '24px',
+  alignItems: 'stretch'
+}
+
+const aboutEyebrowStyle = {
+  margin: '0 0 12px',
+  color: '#9a6a22',
+  fontSize: '0.74rem',
+  fontWeight: '900',
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase'
+}
+
+const aboutTitleStyle = {
+  margin: '0',
+  color: '#4b2b10',
+  fontSize: 'clamp(2.4rem, 5vw, 4.6rem)',
+  lineHeight: '0.95',
+  letterSpacing: '-0.07em',
+  maxWidth: '900px'
+}
+
+const aboutLeadStyle = {
+  margin: '22px 0 0',
+  color: '#5c4632',
+  fontSize: '1.08rem',
+  lineHeight: '1.75',
+  maxWidth: '900px'
+}
+
+const aboutHighlightStyle = {
+  padding: '26px',
+  borderRadius: '28px',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  background: 'linear-gradient(135deg, rgba(92, 53, 18, 0.96), rgba(154, 106, 34, 0.92))',
+  color: '#fff8eb',
+  boxShadow: '0 20px 46px rgba(92, 53, 18, 0.22)'
+}
+
+const aboutHighlightNumberStyle = {
+  color: '#f4d28a',
+  fontSize: '4rem',
+  fontWeight: '950',
+  lineHeight: '0.9',
+  letterSpacing: '-0.08em'
+}
+
+const aboutFeatureGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+  gap: '18px',
+  marginTop: '28px'
+}
+
+const aboutFeatureCardStyle = {
+  padding: '24px',
+  borderRadius: '28px',
+  background: 'rgba(255, 255, 255, 0.66)',
+  border: '1px solid rgba(139, 92, 40, 0.16)',
+  boxShadow: '0 18px 38px rgba(80, 52, 20, 0.1)'
+}
+
+const aboutIconStyle = {
+  width: '46px',
+  height: '46px',
+  borderRadius: '16px',
+  display: 'grid',
+  placeItems: 'center',
+  marginBottom: '18px',
+  background: 'rgba(244, 210, 138, 0.5)',
+  fontSize: '1.5rem'
+}
+
+const aboutCardTitleStyle = {
+  margin: '0 0 10px',
+  color: '#4b2b10',
+  fontSize: '1.45rem',
+  lineHeight: '1.05',
+  letterSpacing: '-0.04em'
+}
+
+const aboutCardTextStyle = {
+  margin: 0,
+  color: '#5c4632',
+  lineHeight: '1.65'
+}
+
+const aboutLowerGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+  gap: '18px',
+  marginTop: '18px'
+}
+
+const aboutDarkCardStyle = {
+  padding: '26px',
+  borderRadius: '30px',
+  background: 'rgba(43, 27, 15, 0.94)',
+  color: '#fff8eb',
+  boxShadow: '0 18px 42px rgba(43, 27, 15, 0.18)'
+}
+
+const aboutLightCardStyle = {
+  padding: '26px',
+  borderRadius: '30px',
+  background: 'rgba(255, 255, 255, 0.72)',
+  border: '1px solid rgba(139, 92, 40, 0.16)'
+}
+
+const aboutDarkEyebrowStyle = {
+  ...aboutEyebrowStyle,
+  color: '#f4d28a'
+}
+
+const aboutStepsStyle = {
+  margin: 0,
+  paddingLeft: '22px',
+  display: 'grid',
+  gap: '12px',
+  color: 'rgba(255, 248, 235, 0.86)',
+  lineHeight: '1.6'
+}
+
+const aboutListStyle = {
+  margin: 0,
+  paddingLeft: '20px',
+  display: 'grid',
+  gap: '10px',
+  color: '#5c4632',
+  lineHeight: '1.62'
+}
+
+const aboutCtaStyle = {
+  marginTop: '22px',
+  border: 0,
+  borderRadius: '999px',
+  padding: '13px 22px',
+  cursor: 'pointer',
+  fontWeight: '900',
+  background: 'linear-gradient(135deg, #9a6a22, #5c3512)',
+  color: '#fff8eb',
+  boxShadow: '0 16px 34px rgba(92, 53, 18, 0.22)'
+}
 
 const adminNavButtonStyle = {
   border: '1px solid rgba(139, 92, 40, 0.22)',

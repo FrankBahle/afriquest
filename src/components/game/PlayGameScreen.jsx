@@ -38,7 +38,8 @@ function PlayGameScreen({
   onOpenLatestScore,
   onNextRound,
   latestAttempt,
-  onGoToSelection
+  onGoToSelection,
+  appSettings = {}
 }) {
 
   const [draggedAiCard, setDraggedAiCard] = useState(null)
@@ -62,6 +63,15 @@ useEffect(() => {
 }, [aiLoading])
 
 const problemCardCode = round?.card?.id ? `PC${round.card.id}` : 'PC'
+
+function handleSubmitClick() {
+  if (appSettings?.confirmBeforeSubmit) {
+    const confirmed = window.confirm('Submit this answer for scoring now?')
+    if (!confirmed) return
+  }
+
+  onSubmit()
+}
 
 
 function getAiCardImage(card) {
@@ -249,6 +259,7 @@ function handleSolutionDrop(event) {
                   <div key={card.id} style={{ display: 'grid', gap: '8px' }}>
                     <button
                       type="button"
+                      data-gla-ai-card="true"
                      draggable={!hasSubmittedExplanation}
 onDragStart={(event) => handleAiDragStart(event, card)}
 onDrag={(event) => handleAiDragMove(event)}
@@ -283,9 +294,9 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
 
                         <div style={{ ...aiCardFaceStyle, transform: 'rotateY(180deg)' }}>
                           <div style={selected ? selectedAiBackStyle : aiBackStyle}>
-                            <p style={{ ...styles.eyebrow, color: selected ? colors.lightGold : colors.gold }}>{card.type}</p>
-                            <h3 style={{ margin: '0 0 8px', lineHeight: '1.2' }}>{card.title}</h3>
-                            <p style={{ margin: 0, lineHeight: '1.5' }}>{card.canDo}</p>
+                            <p data-gla-no-translate="true" style={{ ...styles.eyebrow, color: selected ? colors.lightGold : colors.gold }}>{card.type}</p>
+                            <h3 data-gla-no-translate="true" style={{ margin: '0 0 8px', lineHeight: '1.2' }}>{card.title}</h3>
+                            <p data-gla-no-translate="true" style={{ margin: 0, lineHeight: '1.5' }}>{card.canDo}</p>
                           </div>
                         </div>
                       </div>
@@ -325,17 +336,18 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
   <button
     key={card.id}
     type="button"
+    data-gla-ai-card="true"
     onClick={() => onRemoveSelectedAiCard(card.id)}
     className={dropPulseCardId === card.id ? 'selectedAiCardLanded' : ''}
     style={selectedAiCardStyle}
   >
     <div style={selectedAiTopRowStyle}>
       <span style={selectedAiCodeBadgeStyle}>AC{card.id}</span>
-      <span style={selectedAiTypePillStyle}>{card.type}</span>
+      <span data-gla-no-translate="true" style={selectedAiTypePillStyle}>{card.type}</span>
     </div>
 
-    <strong style={selectedAiTitleStyle}>{card.title}</strong>
-    <p style={selectedAiTypeStyle}>{card.canDo}</p>
+    <strong data-gla-no-translate="true" style={selectedAiTitleStyle}>{card.title}</strong>
+    <p data-gla-no-translate="true" style={selectedAiTypeStyle}>{card.canDo}</p>
   </button>
 ))}
             </div>
@@ -365,7 +377,7 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
 
             <div style={styles.centerButtonRow}>
               <ActionButton
-                onClick={onSubmit}
+                onClick={handleSubmitClick}
                 disabled={selectedAiCards.length === 0 || !userExplanation.trim() || explanationTooLong || hasSubmittedExplanation || aiLoading}
               >
                 {aiLoading ? 'Scoring with the scoring engine...' : 'Submit Solution'}
@@ -412,13 +424,13 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
 />           <div style={dragPreviewContentStyle}>
               <div style={selectedAiTopRowStyle}>
                 <span style={selectedAiCodeBadgeStyle}>AC{draggedAiCard.id}</span>
-                <span style={dragPreviewPillStyle}>{draggedAiCard.type}</span>
+                <span data-gla-no-translate="true" style={dragPreviewPillStyle}>{draggedAiCard.type}</span>
               </div>
 
               <div>
                 <p style={{ ...styles.eyebrow, color: colors.lightGold }}>Dragging AI Card</p>
-                <h3 style={dragPreviewTitleStyle}>{draggedAiCard.title}</h3>
-                <p style={dragPreviewTextStyle}>{draggedAiCard.canDo}</p>
+                <h3 data-gla-no-translate="true" style={dragPreviewTitleStyle}>{draggedAiCard.title}</h3>
+                <p data-gla-no-translate="true" style={dragPreviewTextStyle}>{draggedAiCard.canDo}</p>
               </div>
             </div>
           </div>

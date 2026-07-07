@@ -12,6 +12,10 @@ export async function getGlobalAppSettings() {
     hintsEnabled: false,
     cardFlipEnabledByDefault: true,
     soundEnabledByDefault: false,
+    showCardImagesByDefault: true,
+    highContrastByDefault: false,
+    largeTextByDefault: false,
+    reduceMotionByDefault: false,
     defaultLanguage: 'en',
     appTheme: 'gla-gold'
   })
@@ -24,8 +28,12 @@ export async function saveGlobalAppSettings(formValues) {
     maxAiCardsPerSolution: toNumber(formValues.maxAiCardsPerSolution, 3),
     explanationWordLimit: toNumber(formValues.explanationWordLimit, 100),
     hintsEnabled: Boolean(formValues.hintsEnabled),
-    cardFlipEnabledByDefault: Boolean(formValues.cardFlipEnabledByDefault),
+    cardFlipEnabledByDefault: formValues.cardFlipEnabledByDefault !== false,
     soundEnabledByDefault: Boolean(formValues.soundEnabledByDefault),
+    showCardImagesByDefault: formValues.showCardImagesByDefault !== false,
+    highContrastByDefault: Boolean(formValues.highContrastByDefault),
+    largeTextByDefault: Boolean(formValues.largeTextByDefault),
+    reduceMotionByDefault: Boolean(formValues.reduceMotionByDefault),
     defaultLanguage: cleanText(formValues.defaultLanguage) || 'en',
     appTheme: cleanText(formValues.appTheme) || 'gla-gold'
   }, { actionType: 'save_global_app_settings' })

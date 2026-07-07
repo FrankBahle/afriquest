@@ -105,16 +105,29 @@ export async function deleteUiTranslation(translation) {
 export async function seedStarterLanguages() {
   const starterLanguages = [
     { languageCode: 'en', languageName: 'English', order: 1, deckStatus: 'Published', reviewer: 'GRIT Lab Africa', isActive: true },
-    { languageCode: 'fr', languageName: 'French', order: 2, deckStatus: 'Draft', reviewer: 'Pending', isActive: true },
-    { languageCode: 'zu', languageName: 'isiZulu', order: 3, deckStatus: 'Draft', reviewer: 'Pending', isActive: true }
+    { languageCode: 'zu', languageName: 'isiZulu', order: 2, deckStatus: 'Published', reviewer: 'GRIT Lab Africa', isActive: true },
+    { languageCode: 'fr', languageName: 'French', order: 3, deckStatus: 'Published', reviewer: 'GRIT Lab Africa', isActive: true },
+    { languageCode: 'ar', languageName: 'Arabic', order: 4, deckStatus: 'Published', reviewer: 'GRIT Lab Africa', isActive: true },
+    { languageCode: 'pt', languageName: 'Portuguese', order: 5, deckStatus: 'Published', reviewer: 'GRIT Lab Africa', isActive: true },
+    { languageCode: 'sw', languageName: 'Kiswahili', order: 6, deckStatus: 'Published', reviewer: 'GRIT Lab Africa', isActive: true }
   ]
 
   await Promise.all(starterLanguages.map((language) => saveLanguageVersion(language)))
 
-  await Promise.all([
-    saveUiTranslation({ languageCode: 'fr', namespace: 'player', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'Tableau de bord' }),
-    saveUiTranslation({ languageCode: 'zu', namespace: 'player', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'Ideshibhodi' })
-  ])
+  const starterTranslations = [
+    { languageCode: 'zu', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'Ideshibhodi' },
+    { languageCode: 'zu', key: 'settings', sourceText: 'Settings', translatedText: 'Izilungiselelo' },
+    { languageCode: 'fr', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'Tableau de bord' },
+    { languageCode: 'fr', key: 'settings', sourceText: 'Settings', translatedText: 'Paramètres' },
+    { languageCode: 'ar', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'لوحة التحكم' },
+    { languageCode: 'ar', key: 'settings', sourceText: 'Settings', translatedText: 'الإعدادات' },
+    { languageCode: 'pt', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'Painel' },
+    { languageCode: 'pt', key: 'settings', sourceText: 'Settings', translatedText: 'Definições' },
+    { languageCode: 'sw', key: 'dashboard', sourceText: 'Dashboard', translatedText: 'Dashibodi' },
+    { languageCode: 'sw', key: 'settings', sourceText: 'Settings', translatedText: 'Mipangilio' }
+  ]
 
-  return starterLanguages.length + 2
+  await Promise.all(starterTranslations.map((translation) => saveUiTranslation({ namespace: 'system', ...translation })))
+
+  return starterLanguages.length + starterTranslations.length
 }

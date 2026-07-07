@@ -9,21 +9,21 @@ function AdminLayout({ adminUser, activeScreen, onScreenChange, onLogout, childr
     { id: 'ai-cards', label: t('aiCards', 'AI Cards'), icon: '🤖', description: 'Deck' },
     { id: 'sdg-mappings', label: t('sdgMappings', 'SDG Mappings'), icon: '🌍', description: 'Problem SDGs' },
     { id: 'rubrics', label: t('scoringRubrics', 'Scoring Rubrics'), icon: '🧮', description: 'Rubric' },
-    { id: 'rewards-admin', label: 'Rewards', icon: '🎁', description: 'Claims' },
-    { id: 'global-settings', label: 'Global Settings', icon: '⚙️', description: 'Rules' },
-    { id: 'languages-admin', label: 'Languages', icon: '🗣️', description: 'Add languages' },
-    { id: 'levels-admin', label: 'Levels', icon: '🏆', description: 'Progression' },
-    { id: 'achievements-admin', label: 'Achievements', icon: '🏅', description: 'Badges' },
-    { id: 'players', label: 'Player Analytics', icon: '👥', description: 'Progress' },
-    { id: 'player-details', label: 'Player Details', icon: '🪪', description: 'Accounts' },
-    { id: 'wallet-audit', label: 'GLA Coin Audit', icon: '🪙', description: 'Wallets' },
-    { id: 'leaderboard-admin', label: 'Leaderboard', icon: '🥇', description: 'Export' },
-    { id: 'multiplayer-admin', label: 'Rooms', icon: '🎮', description: 'Moderation' },
-    { id: 'competition-admin', label: 'Teams/Debates', icon: '⚔️', description: 'Modes' },
-    { id: 'feedback-inbox', label: 'Feedback Inbox', icon: '📥', description: 'Issues' },
-    { id: 'card-images', label: 'Card Images', icon: '🖼️', description: 'Assets' },
-    { id: 'certificate-templates', label: 'Certificates', icon: '🎓', description: 'Templates' },
-    { id: 'analytics', label: 'Analytics Dashboard', icon: '📈', description: 'Impact' },
+    { id: 'rewards-admin', label: t('rewards', 'Rewards'), icon: '🎁', description: 'Claims' },
+    { id: 'global-settings', label: t('globalSettings', 'Global Settings'), icon: '⚙️', description: 'Rules' },
+    { id: 'languages-admin', label: t('languages', 'Languages'), icon: '🗣️', description: 'Add languages' },
+    { id: 'levels-admin', label: t('levels', 'Levels'), icon: '🏆', description: 'Progression' },
+    { id: 'achievements-admin', label: t('achievements', 'Achievements'), icon: '🏅', description: 'Badges' },
+    { id: 'players', label: t('playerAnalytics', 'Player Analytics'), icon: '👥', description: 'Progress' },
+    { id: 'player-details', label: t('playerDetails', 'Player Details'), icon: '🪪', description: 'Accounts' },
+    { id: 'wallet-audit', label: t('walletAudit', 'GLA Coin Audit'), icon: '🪙', description: 'Wallets' },
+    { id: 'leaderboard-admin', label: t('leaderboard', 'Leaderboard'), icon: '🥇', description: 'Export' },
+    { id: 'multiplayer-admin', label: t('rooms', 'Rooms'), icon: '🎮', description: 'Moderation' },
+    { id: 'competition-admin', label: t('teamsDebates', 'Teams/Debates'), icon: '⚔️', description: 'Modes' },
+    { id: 'feedback-inbox', label: t('feedbackInbox', 'Feedback Inbox'), icon: '📥', description: 'Issues' },
+    { id: 'card-images', label: t('cardImages', 'Card Images'), icon: '🖼️', description: 'Assets' },
+    { id: 'certificate-templates', label: t('certificates', 'Certificates'), icon: '🎓', description: 'Templates' },
+    { id: 'analytics', label: t('analytics', 'Analytics Dashboard'), icon: '📈', description: 'Impact' },
     { id: 'reports', label: t('reports', 'Reports'), icon: '📤', description: 'Export' }
   ]
 
@@ -35,7 +35,7 @@ function AdminLayout({ adminUser, activeScreen, onScreenChange, onLogout, childr
         <div className="adminSidebarTop">
           <div className="adminLogo">GLA</div>
           <div>
-            <h1>Admin Portal</h1>
+            <h1>{t('adminPortal', 'Admin Portal')}</h1>
             <p>{adminUser?.role || 'Administrator'}</p>
           </div>
         </div>
@@ -79,7 +79,7 @@ function AdminLayout({ adminUser, activeScreen, onScreenChange, onLogout, childr
                 </option>
               ))}
             </select>
-            <a href="/" className="adminBackLink">Back to Player App</a>
+            <a href="/" className="adminBackLink">{t('backToPlayerApp', 'Back to Player App')}</a>
           </div>
         </header>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
 import { getPlayerSettings, savePlayerSettings, DEFAULT_PLAYER_SETTINGS, applyPlayerSettingsToDocument } from '../../services/player/playerSettingsService'
@@ -7,11 +7,12 @@ import { Pill, SectionHeader } from './ui'
 
 function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSettingsChange }) {
   const { currentUser } = useAuth()
-  const { languageCode, languageOptions, setLanguage, autoTranslate, setAutoTranslate, t } = useLanguage()
-  const [settings, setSettings] = useState({ ...DEFAULT_PLAYER_SETTINGS, ...parentSettings, preferredLanguage: languageCode, autoTranslate })
+  const { languageCode, languageOptions, setLanguage, setAutoTranslate, t } = useLanguage()
+  const [settings, setSettings] = useState({ ...DEFAULT_PLAYER_SETTINGS, ...parentSettings, preferredLanguage: languageCode, autoTranslate: true })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const lastAppliedLanguageRef = useRef(languageCode)
 
   const selectedLanguage = useMemo(() => {
     return languageOptions.find((language) => language.languageCode === settings.preferredLanguage) || languageOptions[0]
@@ -26,7 +27,7 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
           ...parentSettings,
           ...savedSettings,
           preferredLanguage: savedSettings.preferredLanguage || parentSettings?.preferredLanguage || languageCode,
-          autoTranslate: savedSettings.autoTranslate ?? parentSettings?.autoTranslate ?? autoTranslate
+          autoTranslate: true
         }
         setSettings(next)
         applyPlayerSettingsToDocument(next)
@@ -40,22 +41,21 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
     load()
   }, [currentUser?.uid])
 
-  async function updateSetting(key, value) {
+  function updateSetting(key, value) {
     setMessage('')
     setError('')
 
     const next = { ...settings, [key]: value }
     setSettings(next)
-    applyPlayerSettingsToDocument(next)
-    onChange?.(next)
-    onSettingsChange?.(next)
 
-    if (key === 'preferredLanguage') {
-      await setLanguage(value)
+    if (key !== 'preferredLanguage') {
+      applyPlayerSettingsToDocument(next)
+      onChange?.(next)
+      onSettingsChange?.(next)
     }
 
-    if (key === 'autoTranslate') {
-      setAutoTranslate(value)
+    if (key === 'preferredLanguage') {
+      setMessage('Language selected. Press Save settings to apply it across the system.')
     }
   }
 
@@ -64,14 +64,27 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
     setMessage('')
     setSaving(true)
 
+    const previousLanguage = lastAppliedLanguageRef.current || languageCode || 'en'
+
     try {
-      const saved = await savePlayerSettings(currentUser?.uid, settings)
-      await setLanguage(saved.preferredLanguage)
-      setAutoTranslate(saved.autoTranslate)
+      const saved = await savePlayerSettings(currentUser?.uid, { ...settings, autoTranslate: true })
+      const nextLanguage = saved.preferredLanguage || 'en'
+      const shouldRefresh = nextLanguage !== previousLanguage
+
+      setAutoTranslate(true)
+      await setLanguage(nextLanguage)
       applyPlayerSettingsToDocument(saved)
       onChange?.(saved)
       onSettingsChange?.(saved)
       onSaved?.(saved)
+      lastAppliedLanguageRef.current = nextLanguage
+
+      if (shouldRefresh) {
+        setMessage('Language saved. Refreshing the system so the new language applies everywhere...')
+        window.setTimeout(() => window.location.reload(), 650)
+        return
+      }
+
       setMessage('Settings saved to the system and applied across the player system.')
     } catch (err) {
       setError(err.message || 'Could not save settings.')
@@ -86,7 +99,7 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
         <div>
           <p style={{ ...styles.eyebrow, color: '#f4d28a' }}>{t('settings', 'Settings')}</p>
           <h1 style={settingsHeroTitleStyle}>{t('accessibilitySettings', 'Professional player settings')}</h1>
-          <p style={settingsHeroTextStyle}>Manage language, accessibility and game display preferences. These settings are saved to the system and applied in the app.</p>
+          <p style={settingsHeroTextStyle}>Manage language, accessibility and game display preferences. These settings only change interface words and behaviour, not your saved game data.</p>
         </div>
 
         <div style={languageBadgeStyle}>
@@ -97,45 +110,47 @@ function AccessibilityScreen({ settings: parentSettings, onChange, onSaved, onSe
 
       <div style={stickySaveBarStyle}>
         <div>
-          <strong style={{ color: '#4b2b10' }}>Player experience controls</strong>
-          <p style={saveHelpStyle}>Change settings below, then save them permanently.</p>
+          <strong style={{ color: '#4b2b10' }}>{t('playerSettings', 'Player experience controls')}</strong>
+          <p style={saveHelpStyle}>Change settings below, then save them permanently. You can switch between languages again any time.</p>
         </div>
-        <button type="button" style={buttonStyle} onClick={save} disabled={saving}>{saving ? 'Saving...' : t('saveSettings', 'Save settings')}</button>
+        <button type="button" style={buttonStyle} onClick={save} disabled={saving}>{saving ? t('saving', 'Saving...') : t('saveSettings', 'Save settings')}</button>
       </div>
 
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
 
-      <SectionHeader eyebrow="Language" title="Translate the player interface">
-        Pick the player language. With auto-translate on, sidebar labels, page headings, buttons and supported UI text translate using the system `uiTranslations` plus built-in fallbacks.
+      <SectionHeader eyebrow={t('language', 'Language')} title={t('chooseLanguage', 'Choose language')}>
+        Choose one language for the full system. English, isiZulu, French, Arabic, Portuguese and Kiswahili are always available. Only interface text changes; saved player data, scores, card records and database values stay the same.
       </SectionHeader>
 
       <div style={languageGridStyle}>
         <label style={largeFieldStyle}>
-          <span>Preferred language</span>
+          <span>{t('chooseLanguage', 'Preferred language')}</span>
           <select style={inputStyle} value={settings.preferredLanguage} onChange={(event) => updateSetting('preferredLanguage', event.target.value)}>
             {languageOptions.map((language) => (
               <option key={language.languageCode} value={language.languageCode}>{language.languageName}</option>
             ))}
           </select>
         </label>
-
-        <Toggle title={t('autoTranslate', 'Auto translate interface')} description="Translate supported headings, buttons, labels and sidebar text." checked={settings.autoTranslate} onChange={(value) => updateSetting('autoTranslate', value)} />
       </div>
 
       <SectionHeader eyebrow="Accessibility" title="Make AfriQuest easier to read and use." />
       <div style={settingsGridStyle}>
         <Toggle title={t('highContrast', 'High contrast')} description="Strengthen contrast for text and cards." checked={settings.highContrast} onChange={(value) => updateSetting('highContrast', value)} />
-        <Toggle title={t('largeText', 'Large text')} description="Increase text size across the player app." checked={settings.largeText} onChange={(value) => updateSetting('largeText', value)} />
+        <Toggle title={t('largeText', 'Large text')} description="Increase text size across the player and admin app." checked={settings.largeText} onChange={(value) => updateSetting('largeText', value)} />
         <Toggle title={t('reduceMotion', 'Reduce motion')} description="Reduce transitions and movement effects." checked={settings.reduceMotion} onChange={(value) => updateSetting('reduceMotion', value)} />
-        <Toggle title="Compact mode" description="Make cards and panels tighter on smaller screens." checked={settings.compactMode} onChange={(value) => updateSetting('compactMode', value)} />
+        <Toggle title={t('lowBandwidth', 'Low bandwidth mode')} description="Reduce heavy visual behaviour for slower connections." checked={settings.lowBandwidth || settings.saveDataMode} onChange={(value) => updateSetting('lowBandwidth', value)} />
+        <Toggle title={t('keyboardMode', 'Keyboard friendly mode')} description="Keep controls clearer for keyboard navigation." checked={settings.keyboardMode} onChange={(value) => updateSetting('keyboardMode', value)} />
+        <Toggle title={t('screenReaderLabels', 'Screen reader labels')} description="Keep helpful labels enabled for assistive technology." checked={settings.screenReaderLabels} onChange={(value) => updateSetting('screenReaderLabels', value)} />
+        <Toggle title={t('compactMode', 'Compact mode')} description="Make cards and panels tighter on smaller screens." checked={settings.compactMode} onChange={(value) => updateSetting('compactMode', value)} />
       </div>
 
       <SectionHeader eyebrow="Game display" title="Control how game cards behave." />
       <div style={settingsGridStyle}>
         <Toggle title={t('cardFlip', 'Card flip animation')} description="Allow cards to flip when opened." checked={settings.cardFlipEnabled} onChange={(value) => updateSetting('cardFlipEnabled', value)} />
         <Toggle title={t('soundEffects', 'Sound effects')} description="Prepare the app for sound feedback when enabled." checked={settings.soundEnabled} onChange={(value) => updateSetting('soundEnabled', value)} />
-        <Toggle title="Show card images" description="Display card artwork and image previews." checked={settings.showCardImages} onChange={(value) => updateSetting('showCardImages', value)} />
+        <Toggle title={t('showCardImages', 'Show card images')} description="Display card artwork and image previews." checked={settings.showCardImages} onChange={(value) => updateSetting('showCardImages', value)} />
+        <Toggle title={t('confirmBeforeSubmit', 'Confirm before submitting answers')} description="Ask for confirmation before a scoring submission is sent." checked={settings.confirmBeforeSubmit} onChange={(value) => updateSetting('confirmBeforeSubmit', value)} />
       </div>
     </div>
   )

@@ -6,7 +6,6 @@ import { usePlayerLanguage } from '../../hooks/usePlayerLanguage'
 import problemCardData from '../../assets/json/grit_lab_africa_problem_cards.json'
 import aiCards from '../../data/aiCards'
 import {
-  acceptConnectionRequest,
   acceptRoomInvite,
   acceptRoomJoinRequest,
   createMultiplayerRoom,
@@ -15,7 +14,6 @@ import {
   clearRoomEvents,
   deleteRoomEvent,
   deleteTeam,
-  declineConnectionRequest,
   declineRoomInvite,
   declineRoomJoinRequest,
   endMultiplayerRoom,
@@ -25,7 +23,6 @@ import {
   markNotificationRead,
   requestToJoinRoom,
   seedMultiplayerRealtimeCollections,
-  sendPlayerConnectionRequest,
   setTournamentRound,
   startChallengeRoom,
   startTeamRoom,
@@ -36,7 +33,6 @@ import {
   submitTeamSolution,
   submitTournamentRound,
   subscribeMultiplayerHubData,
-  subscribePlayerConnections,
   subscribeRoomDetails,
   subscribeUserNotifications,
   updateDebatePrompt,
@@ -90,7 +86,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
   const [selectedRoomId, setSelectedRoomId] = useState('')
   const [selectedRoomDetails, setSelectedRoomDetails] = useState(null)
   const [notifications, setNotifications] = useState([])
-  const [connections, setConnections] = useState([])
   const [activeMode, setActiveMode] = useState('challenge')
   const [modeFilter, setModeFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -112,7 +107,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
   const [joinCode, setJoinCode] = useState('')
   const [joinRequestMessage, setJoinRequestMessage] = useState('')
   const [inviteUserId, setInviteUserId] = useState('')
-  const [connectionUserId, setConnectionUserId] = useState('')
 
   const [problemCardId, setProblemCardId] = useState('')
   const [problemTitle, setProblemTitle] = useState('')
@@ -155,11 +149,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     return unsubscribe
   }, [userId])
 
-  useEffect(() => {
-    if (!userId) return
-    const unsubscribe = subscribePlayerConnections(userId, setConnections)
-    return unsubscribe
-  }, [userId])
 
   useEffect(() => {
     if (!statusMessage) return
@@ -527,20 +516,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     }
   }
 
-  async function handleConnectionRequest(event) {
-    event.preventDefault()
-    setError('')
-    setStatusMessage('')
-
-    try {
-      await sendPlayerConnectionRequest({ fromUserId: userId, fromDisplayName: displayName, toUserId: connectionUserId })
-      setConnectionUserId('')
-      setStatusMessage('Connection request sent.')
-    } catch (err) {
-      handleError(err, 'Could not send connection request.')
-    }
-  }
-
   async function handleNotificationAction(notification) {
     setError('')
     setStatusMessage('')
@@ -553,16 +528,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         return
       }
 
-      if (notification.actionType === 'accept_connection_request') {
-        await acceptConnectionRequest({
-          requestId: notification.actionData?.requestId,
-          currentUserId: userId,
-          currentDisplayName: displayName
-        })
-        await markNotificationRead(notification.notificationId)
-        setStatusMessage('Connection request accepted.')
-        return
-      }
 
       if (notification.actionData?.roomId) {
         openRoom(notification.actionData.roomId)
@@ -581,9 +546,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     try {
       if (notification.actionType === 'accept_room_invite') {
         await declineRoomInvite(notification.notificationId)
-      } else if (notification.actionType === 'accept_connection_request') {
-        await declineConnectionRequest({ requestId: notification.actionData?.requestId })
-        await markNotificationRead(notification.notificationId)
       } else {
         await markNotificationRead(notification.notificationId)
       }
@@ -930,7 +892,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         <HomePage
           rooms={filteredRooms}
           allRooms={rooms}
-          connections={connections}
           notifications={notifications}
           unreadCount={unreadCount}
           activeMode={activeMode}
@@ -957,9 +918,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           onNotificationAction={handleNotificationAction}
           onNotificationDecline={handleDeclineNotification}
           onMarkRead={markNotificationRead}
-          connectionUserId={connectionUserId}
-          onConnectionUserIdChange={setConnectionUserId}
-          onSendConnectionRequest={handleConnectionRequest}
         />
       )}
 
@@ -1001,11 +959,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         <NotificationsPage
           notifications={notifications}
           unreadCount={unreadCount}
-          connections={connections}
           presenceByUserId={presenceByUserId}
-          connectionUserId={connectionUserId}
-          onConnectionUserIdChange={setConnectionUserId}
-          onSendConnectionRequest={handleConnectionRequest}
           onNotificationAction={handleNotificationAction}
           onNotificationDecline={handleDeclineNotification}
           onMarkRead={markNotificationRead}
@@ -1021,7 +975,6 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           isHost={isHost}
           currentPlayer={currentPlayer}
           presenceByUserId={presenceByUserId}
-          connections={connections}
           inviteUserId={inviteUserId}
           endReason={endReason}
           problemCardId={problemCardId}
@@ -1187,7 +1140,6 @@ function PageTabs({ page, unreadCount, onChange, onHome }) {
 function HomePage({
   rooms,
   allRooms,
-  connections,
   notifications,
   unreadCount,
   activeMode,
@@ -1210,9 +1162,6 @@ function HomePage({
   onNotificationAction,
   onNotificationDecline,
   onMarkRead,
-  connectionUserId,
-  onConnectionUserIdChange,
-  onSendConnectionRequest
 }) {
   return (
     <>
@@ -1396,7 +1345,6 @@ function RoomPage(props) {
     isHost,
     currentPlayer,
     presenceByUserId,
-    connections = [],
     inviteUserId,
     endReason,
     problemCardId,
@@ -1737,62 +1685,6 @@ function NotificationPanel({ notifications, unreadCount, onAction, onDecline, on
   )
 }
 
-function ConnectionsPanel({ connections, presenceByUserId, connectionUserId, onConnectionUserIdChange, onSendConnectionRequest }) {
-  return (
-    <div style={cardStyle}>
-      <p style={styles.eyebrow}>Connections</p>
-      <h3 style={styles.smallCardTitle}>Send a connection request</h3>
-      <p style={styles.smallCardText}>Enter a player's email or UID. When they accept, they will appear here as a saved connection and you can invite them into any lobby.</p>
-      <form onSubmit={onSendConnectionRequest} style={formGridStyle}>
-        <label style={fieldStyle}>
-          Player email or UID
-          <input value={connectionUserId} onChange={(event) => onConnectionUserIdChange(event.target.value)} placeholder="Enter another player's email or UID" style={inputStyle} />
-        </label>
-        <button type="submit" style={primaryButtonStyle}>Send connection request</button>
-      </form>
-
-      <div style={listStyle}>
-        {connections.length === 0 ? (
-          <p style={styles.smallCardText}>No saved connections yet.</p>
-        ) : connections.map((connection) => (
-          <div key={connection.connectionId} style={itemStyle}>
-            <div>
-              <strong style={itemTitleStyle}><LiveDot online={isPresenceOnline(presenceByUserId[connection.connectedUserId])} /> {connection.connectedDisplayName}</strong>
-              <p style={styles.smallCardText}>{connection.connectedUserId}</p>
-            </div>
-            <Pill>{connection.status}</Pill>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function InviteConnections({ connections, roomPlayers, onInvite }) {
-  const joinedIds = new Set((roomPlayers || []).map((player) => player.userId))
-  const inviteOptions = (connections || []).filter((connection) => connection.status === 'connected' && !joinedIds.has(connection.connectedUserId))
-
-  if (inviteOptions.length === 0) {
-    return <p style={{ ...styles.smallCardText, marginTop: 12 }}>No saved connections available to invite. You can still invite by email or player ID above.</p>
-  }
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      <p style={styles.eyebrow}>Quick invite saved connections</p>
-      <div style={listStyle}>
-        {inviteOptions.map((connection) => (
-          <article key={connection.connectionId} style={itemStyle}>
-            <div>
-              <strong style={itemTitleStyle}>{connection.connectedDisplayName || 'Player'}</strong>
-              <p style={styles.smallCardText}>{connection.connectedUserId}</p>
-            </div>
-            <button type="button" onClick={() => onInvite(connection.connectedUserId)} style={smallButtonStyle}>Invite</button>
-          </article>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 function PlayerList({ players, presenceByUserId }) {
   if (players.length === 0) return <p style={styles.smallCardText}>No players in the room yet.</p>

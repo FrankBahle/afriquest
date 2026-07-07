@@ -27,12 +27,6 @@ function AdminLoginScreen({ onLogin }) {
     onLogin({ email: ADMIN_CREDENTIALS.email, role: 'GRIT Lab Africa Administrator' })
   }
 
-  function fillDemoDetails() {
-    setEmail(ADMIN_CREDENTIALS.email)
-    setPassword(ADMIN_CREDENTIALS.password)
-    setAccessCode(ADMIN_CREDENTIALS.accessCode)
-    setError('')
-  }
 
   return (
     <main className="adminLoginPage">
@@ -71,16 +65,8 @@ function AdminLoginScreen({ onLogin }) {
 
           <div className="adminLoginActions">
             <button type="submit" className="adminPrimaryButton">Login as Admin</button>
-            <button type="button" onClick={fillDemoDetails} className="adminSecondaryButton">Fill Demo Details</button>
           </div>
         </form>
-
-        <div className="adminDemoDetails">
-          <strong>Static demo admin details</strong>
-          <span>Email: {ADMIN_CREDENTIALS.email}</span>
-          <span>Password: {ADMIN_CREDENTIALS.password}</span>
-          <span>Access code: {ADMIN_CREDENTIALS.accessCode}</span>
-        </div>
       </section>
     </main>
   )
@@ -186,8 +172,7 @@ const loginCss = `
     margin-top: 8px;
   }
 
-  .adminPrimaryButton,
-  .adminSecondaryButton {
+  .adminPrimaryButton {
     border-radius: 999px;
     padding: 13px 22px;
     cursor: pointer;
@@ -199,28 +184,6 @@ const loginCss = `
     background: linear-gradient(135deg, #9a6a22, #5c3512);
     color: #fff8eb;
     box-shadow: 0 14px 30px rgba(92, 53, 18, 0.22);
-  }
-
-  .adminSecondaryButton {
-    border: 1px solid rgba(139, 92, 40, 0.22);
-    background: rgba(255, 255, 255, 0.68);
-    color: #5c3512;
-  }
-
-  .adminDemoDetails {
-    margin-top: 24px;
-    padding: 18px;
-    border-radius: 22px;
-    display: grid;
-    gap: 6px;
-    background: rgba(244, 210, 138, 0.24);
-    border: 1px solid rgba(154, 106, 34, 0.22);
-    color: #5c3512;
-  }
-
-  .adminDemoDetails span {
-    color: #5c4632;
-    font-size: 0.94rem;
   }
 
   @media (max-width: 620px) {
