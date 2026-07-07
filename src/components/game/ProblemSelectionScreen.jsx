@@ -76,13 +76,17 @@ function ProblemSelectionScreen({ cards, selectedProblemIds, onToggleProblem, on
                 aria-pressed={flipped}
                 style={{
                   ...cardFlipInnerStyle,
-                  transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                  transform: 'none'
                 }}
               >
                 <div
                   style={{
                     ...cardFaceStyle,
                     ...cardFrontStyle,
+                    opacity: flipped ? 0 : 1,
+                    visibility: flipped ? 'hidden' : 'visible',
+                    pointerEvents: flipped ? 'none' : 'auto',
+                    zIndex: flipped ? 1 : 2,
                     border: selected ? '2px solid rgba(154, 106, 34, 0.82)' : '1px solid rgba(139, 92, 40, 0.18)',
                     boxShadow: selected ? '0 22px 48px rgba(80, 52, 20, 0.22)' : '0 12px 28px rgba(80, 52, 20, 0.08)'
                   }}
@@ -114,6 +118,10 @@ function ProblemSelectionScreen({ cards, selectedProblemIds, onToggleProblem, on
                   style={{
                     ...cardFaceStyle,
                     ...cardBackStyle,
+                    opacity: flipped ? 1 : 0,
+                    visibility: flipped ? 'visible' : 'hidden',
+                    pointerEvents: flipped ? 'auto' : 'none',
+                    zIndex: flipped ? 2 : 1,
                     border: selected ? '2px solid rgba(154, 106, 34, 0.82)' : '1px solid rgba(139, 92, 40, 0.18)',
                     boxShadow: selected ? '0 22px 48px rgba(80, 52, 20, 0.22)' : '0 12px 28px rgba(80, 52, 20, 0.08)'
                   }}
@@ -217,8 +225,8 @@ const cardFlipInnerStyle = {
   position: 'relative',
   width: '100%',
   minHeight: 340,
-  transformStyle: 'preserve-3d',
-  transition: 'transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+  transformStyle: 'flat',
+  transition: 'opacity 260ms ease, transform 260ms ease',
   cursor: 'pointer'
 }
 
@@ -229,7 +237,9 @@ const cardFaceStyle = {
   borderRadius: 24,
   overflow: 'hidden',
   backfaceVisibility: 'hidden',
-  WebkitBackfaceVisibility: 'hidden'
+  WebkitBackfaceVisibility: 'hidden',
+  transform: 'translateZ(0)',
+  transition: 'opacity 220ms ease, visibility 220ms ease'
 }
 
 const cardFrontStyle = {
@@ -240,7 +250,7 @@ const cardBackStyle = {
   padding: 18,
   textAlign: 'left',
   color: '#3b2817',
-  transform: 'rotateY(180deg)',
+  transform: 'translateZ(0)',
   background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255,248,235,0.72))',
   display: 'flex',
   flexDirection: 'column',

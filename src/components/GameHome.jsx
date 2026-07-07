@@ -20,7 +20,6 @@ import LevelsProgressionScreen from './game/LevelsProgressionScreen'
 import LeaderboardScreen from './game/LeaderboardScreen'
 import AnalyticsDashboardScreen from './game/AnalyticsDashboardScreen'
 import AccessibilityScreen from './game/AccessibilityScreen'
-import CardDesignShowcaseScreen from './game/CardDesignShowcaseScreen'
 import MultiplayerHubScreen from './game/MultiplayerHubScreen'
 import RewardsLaunchScreen from './game/RewardsLaunchScreen'
 import { LoadingPage } from './game/ui'
@@ -1090,15 +1089,6 @@ averageScore={firestoreAverageScore}
             settings={accessibilitySettings}
             onChange={updateAccessibilitySetting}
             onSaved={handleSettingsSaved}
-          />
-        )}
-
-        {screen === 'designs' && (
-          <CardDesignShowcaseScreen
-            problemCardBack={card2}
-            aiCardBack={card1}
-            cards={cards}
-            aiCards={availableAiCards}
           />
         )}
 

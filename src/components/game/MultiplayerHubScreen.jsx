@@ -191,10 +191,14 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     knownNotificationIdsRef.current = new Set(notifications.map((notification) => notification.notificationId))
 
     if (newNotification) {
+      const roomAwareLabel = newNotification.actionData?.roomId ? 'Open room' : (newNotification.actionType ? 'Open / Accept' : 'Open notification')
+
       setToast({
         tone: 'info',
         title: newNotification.title || 'New multiplayer notification',
-        message: newNotification.message || 'Open notifications to continue.'
+        message: newNotification.message || 'Open notifications to continue.',
+        notification: newNotification,
+        actionLabel: roomAwareLabel
       })
     }
   }, [notifications])
@@ -883,7 +887,12 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     <div className="mpRootPanel" style={styles.panel}>
       <style>{pageCss}</style>
       <ScoringOverlay active={Boolean(scoringMessage)} message={scoringMessage} progress={scoringProgress} />
-      <PopupToast toast={toast} onClose={() => setToast(null)} />
+      <PopupToast toast={toast} onClose={() => setToast(null)} onAction={() => {
+        if (toast?.notification) {
+          handleNotificationAction(toast.notification)
+        }
+        setToast(null)
+      }} />
 
       <div className="mpHero">
         <div>
@@ -1111,7 +1120,7 @@ function ScoringOverlay({ active, message, progress }) {
   )
 }
 
-function PopupToast({ toast, onClose }) {
+function PopupToast({ toast, onClose, onAction }) {
   if (!toast) return null
   const toneClass = toast.tone === 'error' ? 'error' : toast.tone === 'info' ? 'info' : 'success'
 
@@ -1120,8 +1129,13 @@ function PopupToast({ toast, onClose }) {
       <div>
         <strong>{toast.title || 'Notification'}</strong>
         <p>{toast.message}</p>
+        {toast.actionLabel && (
+          <button type="button" onClick={onAction} className="mpToastAction">
+            {toast.actionLabel}
+          </button>
+        )}
       </div>
-      <button type="button" onClick={onClose} aria-label="Close notification">×</button>
+      <button type="button" onClick={onClose} className="mpToastClose" aria-label="Close notification">×</button>
     </aside>
   )
 }
@@ -1223,24 +1237,14 @@ function HomePage({
         />
       </div>
 
-      <div className="mpTwoCol">
-        <ConnectionsPanel
-          connections={connections}
-          presenceByUserId={presenceByUserId}
-          connectionUserId={connectionUserId}
-          onConnectionUserIdChange={onConnectionUserIdChange}
-          onSendConnectionRequest={onSendConnectionRequest}
-        />
-
-        <div style={cardStyle}>
-          <p style={styles.eyebrow}>Live summary</p>
-          <div className="mpMiniGrid">
-            <MiniStat title="Rooms" value={allRooms.length} />
-            <MiniStat title="Challenge" value={modeCounts.challenge || 0} />
-            <MiniStat title="Team" value={modeCounts.team || 0} />
-            <MiniStat title="Debate" value={modeCounts.debate || 0} />
-            <MiniStat title="Tournament" value={modeCounts.tournament || 0} />
-          </div>
+      <div style={cardStyle}>
+        <p style={styles.eyebrow}>Live summary</p>
+        <div className="mpMiniGrid">
+          <MiniStat title="Rooms" value={allRooms.length} />
+          <MiniStat title="Challenge" value={modeCounts.challenge || 0} />
+          <MiniStat title="Team" value={modeCounts.team || 0} />
+          <MiniStat title="Debate" value={modeCounts.debate || 0} />
+          <MiniStat title="Tournament" value={modeCounts.tournament || 0} />
         </div>
       </div>
 
@@ -1377,12 +1381,9 @@ function JoinRoomPage({ joinCode, joinRequestMessage, rooms, presenceByUserId, u
   )
 }
 
-function NotificationsPage({ notifications, unreadCount, connections, presenceByUserId, connectionUserId, onConnectionUserIdChange, onSendConnectionRequest, onNotificationAction, onNotificationDecline, onMarkRead }) {
+function NotificationsPage({ notifications, unreadCount, onNotificationAction, onNotificationDecline, onMarkRead }) {
   return (
-    <div className="mpTwoCol">
-      <NotificationPanel notifications={notifications} unreadCount={unreadCount} onAction={onNotificationAction} onDecline={onNotificationDecline} onMarkRead={onMarkRead} limit={30} />
-      <ConnectionsPanel connections={connections} presenceByUserId={presenceByUserId} connectionUserId={connectionUserId} onConnectionUserIdChange={onConnectionUserIdChange} onSendConnectionRequest={onSendConnectionRequest} />
-    </div>
+    <NotificationPanel notifications={notifications} unreadCount={unreadCount} onAction={onNotificationAction} onDecline={onNotificationDecline} onMarkRead={onMarkRead} limit={30} />
   )
 }
 
@@ -1489,7 +1490,6 @@ function RoomPage(props) {
             </label>
             <button type="submit" style={primaryButtonStyle}>Send room invite</button>
           </form>
-          <InviteConnections connections={connections} roomPlayers={selectedRoomDetails.roomPlayers || []} onInvite={onSendInviteTo} />
           <RoomRequests requests={selectedRoomDetails.roomRequests || []} isHost={isHost} onAccept={onAcceptRoomRequest} onDecline={onDeclineRoomRequest} />
         </div>
       </div>
@@ -2780,9 +2780,12 @@ const pageCss = `
   z-index: 9999;
   display: grid;
   place-items: center;
+  align-items: center;
+  justify-items: center;
   padding: 20px;
   background: rgba(32, 22, 14, 0.58);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .mpScoringCard {
@@ -2830,7 +2833,7 @@ const pageCss = `
 .mpToast {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  top: 18px;
   z-index: 10000;
   width: min(380px, calc(100vw - 36px));
   padding: 16px;
@@ -2856,13 +2859,24 @@ const pageCss = `
 
 .mpToast button {
   border: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
   cursor: pointer;
   background: rgba(139, 92, 40, 0.13);
   color: #5c3512;
   font-weight: 900;
+}
+
+.mpToastClose {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
+
+.mpToastAction {
+  margin-top: 10px;
+  width: auto;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 999px;
 }
 
 .mpToast.success { border-color: rgba(34, 197, 94, 0.32); }
@@ -2966,7 +2980,8 @@ const pageCss = `
   .mpToast {
     left: 12px;
     right: 12px;
-    bottom: 12px;
+    top: 12px;
+    bottom: auto;
     width: auto;
   }
 }

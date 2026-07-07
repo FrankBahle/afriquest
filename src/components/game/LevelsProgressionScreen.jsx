@@ -68,19 +68,11 @@ function LevelsProgressionScreen({
     loadLevels()
   }, [currentUser?.uid, totalGlaCoinEarned, completedProblems, averageScore])
 
-  if (loading) {
-    return (
-      <LoadingPage
-        title="Loading levels"
-        message="Checking locked and unlocked levels from the system."
-      />
-    )
-  }
-
   const filteredLevels = useMemo(() => {
     const cleanSearch = searchTerm.trim().toLowerCase()
+    const levels = Array.isArray(levelProgress?.levels) ? levelProgress.levels : []
 
-    return levelProgress.levels.filter((level) => {
+    return levels.filter((level) => {
       const searchableText = [level.title, level.description, level.levelId]
         .join(' ')
         .toLowerCase()
@@ -94,7 +86,16 @@ function LevelsProgressionScreen({
 
       return matchesSearch && matchesStatus
     })
-  }, [levelProgress.levels, searchTerm, statusFilter])
+  }, [levelProgress?.levels, searchTerm, statusFilter])
+
+  if (loading) {
+    return (
+      <LoadingPage
+        title="Loading levels"
+        message="Checking locked and unlocked levels from the system."
+      />
+    )
+  }
 
   const currentLevel = levelProgress.currentLevel
   const nextLevel = levelProgress.nextLevel

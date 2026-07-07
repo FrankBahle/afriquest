@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { styles, colors } from './gameStyles'
 import { ActionButton, MetricCard } from './ui'
 
@@ -45,6 +45,21 @@ function PlayGameScreen({
 const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
 const [isOverSolutionBoard, setIsOverSolutionBoard] = useState(false)
 const [dropPulseCardId, setDropPulseCardId] = useState('')
+const [scoringProgress, setScoringProgress] = useState(0)
+
+useEffect(() => {
+  if (!aiLoading) {
+    setScoringProgress(0)
+    return undefined
+  }
+
+  setScoringProgress(10)
+  const interval = setInterval(() => {
+    setScoringProgress((progress) => Math.min(94, progress + Math.max(4, Math.round((96 - progress) * 0.14))))
+  }, 420)
+
+  return () => clearInterval(interval)
+}, [aiLoading])
 
 const problemCardCode = round?.card?.id ? `PC${round.card.id}` : 'PC'
 
@@ -380,6 +395,7 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
           </div>
         </div>
       </div>
+      <JourneyScoringOverlay active={aiLoading} progress={scoringProgress} />
       {draggedAiCard && (
         <div
           className="dragCardPreview"
@@ -409,6 +425,29 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
         </div>
       )}
     </section>
+  )
+}
+
+function JourneyScoringOverlay({ active, progress }) {
+  if (!active) return null
+
+  const safeProgress = Math.max(10, Math.min(99, progress || 10))
+
+  return (
+    <div className="journeyScoringOverlay" role="status" aria-live="polite">
+      <div className="journeyScoringCard">
+        <div className="journeyScoringSpinner"></div>
+        <p style={{ ...styles.eyebrow, textAlign: 'center' }}>Scoring in progress</p>
+        <h3 style={{ ...styles.smallCardTitle, textAlign: 'center' }}>Checking your solution...</h3>
+        <p style={{ ...styles.smallCardText, textAlign: 'center' }}>
+          Please wait while the system reviews your AI card choices, SDG alignment, practical feasibility, creativity and responsible use.
+        </p>
+        <div className="journeyProgressTrack">
+          <span style={{ width: `${safeProgress}%` }}></span>
+        </div>
+        <small style={{ color: colors.brown2, textAlign: 'center', fontWeight: 900 }}>{Math.round(safeProgress)}% complete</small>
+      </div>
+    </div>
   )
 }
 
@@ -690,6 +729,59 @@ const playGameMotionCss = `
     100% {
       transform: translateY(0) scale(1) rotate(0deg);
     }
+  }
+
+  .journeyScoringOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(32, 22, 14, 0.56);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .journeyScoringCard {
+    width: min(440px, 100%);
+    padding: 26px;
+    border-radius: 30px;
+    border: 1px solid rgba(244, 210, 138, 0.38);
+    background: linear-gradient(135deg, rgba(255, 248, 235, 0.96), rgba(244, 210, 138, 0.92));
+    box-shadow: 0 30px 86px rgba(0,0,0,0.34);
+    display: grid;
+    gap: 14px;
+  }
+
+  .journeyScoringSpinner {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto;
+    border-radius: 50%;
+    border: 5px solid rgba(154, 106, 34, 0.2);
+    border-top-color: rgba(92, 53, 18, 0.95);
+    animation: journeySpin 0.88s linear infinite;
+  }
+
+  .journeyProgressTrack {
+    width: 100%;
+    height: 12px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(92, 53, 18, 0.16);
+  }
+
+  .journeyProgressTrack span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #9a6a22, #5c3512);
+    transition: width 0.22s ease;
+  }
+
+  @keyframes journeySpin {
+    to { transform: rotate(360deg); }
   }
 `
 
