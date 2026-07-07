@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { styles } from './gameStyles'
 import { Pill, SectionHeader } from './ui'
@@ -12,6 +12,9 @@ import {
   createMultiplayerRoom,
   createRoomInvite,
   createTeam,
+  clearRoomEvents,
+  deleteRoomEvent,
+  deleteTeam,
   declineConnectionRequest,
   declineRoomInvite,
   declineRoomJoinRequest,
@@ -95,6 +98,11 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [roomLoading, setRoomLoading] = useState(false)
+  const [scoringMessage, setScoringMessage] = useState('')
+  const [scoringProgress, setScoringProgress] = useState(0)
+  const [toast, setToast] = useState(null)
+  const knownNotificationIdsRef = useRef(new Set())
+  const notificationsReadyRef = useRef(false)
 
   const [roomName, setRoomName] = useState('')
   const [mode, setMode] = useState('challenge')
@@ -152,6 +160,54 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     const unsubscribe = subscribePlayerConnections(userId, setConnections)
     return unsubscribe
   }, [userId])
+
+  useEffect(() => {
+    if (!statusMessage) return
+    setToast({ tone: 'success', title: 'Multiplayer update', message: statusMessage })
+  }, [statusMessage])
+
+  useEffect(() => {
+    if (!error) return
+    setToast({ tone: 'error', title: 'Action needed', message: error })
+  }, [error])
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(null), 5500)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  useEffect(() => {
+    if (!notificationsReadyRef.current) {
+      knownNotificationIdsRef.current = new Set(notifications.map((notification) => notification.notificationId))
+      notificationsReadyRef.current = true
+      return
+    }
+
+    const newNotification = notifications.find((notification) => {
+      return notification.status === 'unread' && !knownNotificationIdsRef.current.has(notification.notificationId)
+    })
+
+    knownNotificationIdsRef.current = new Set(notifications.map((notification) => notification.notificationId))
+
+    if (newNotification) {
+      setToast({
+        tone: 'info',
+        title: newNotification.title || 'New multiplayer notification',
+        message: newNotification.message || 'Open notifications to continue.'
+      })
+    }
+  }, [notifications])
+
+  useEffect(() => {
+    if (!scoringMessage) return undefined
+    setScoringProgress(8)
+    const interval = setInterval(() => {
+      setScoringProgress((progress) => Math.min(92, progress + Math.max(3, Math.round((96 - progress) * 0.12))))
+    }, 420)
+
+    return () => clearInterval(interval)
+  }, [scoringMessage])
 
   useEffect(() => {
     if (!userId) return
@@ -274,6 +330,22 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
   function handleError(err, fallback) {
     console.error(err)
     setError(err.message || fallback)
+  }
+
+  async function runScoredAction(message, action) {
+    setScoringMessage(message)
+    setScoringProgress(8)
+
+    try {
+      const result = await action()
+      setScoringProgress(100)
+      return result
+    } finally {
+      setTimeout(() => {
+        setScoringMessage('')
+        setScoringProgress(0)
+      }, 650)
+    }
   }
 
   function resetPlayForm() {
@@ -537,7 +609,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     setStatusMessage('')
 
     try {
-      const result = await submitChallengeAttempt({
+      const result = await runScoredAction('Scoring your challenge answer...', () => submitChallengeAttempt({
         roomId: selectedRoomId,
         userId,
         displayName,
@@ -546,7 +618,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         selectedAiCardIds,
         selectedAiCardTitles,
         explanation
-      })
+      }))
 
       resetPlayForm()
       setStatusMessage(`Challenge submitted. Score: ${result.totalScore}/100.`)
@@ -577,9 +649,46 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     try {
       await joinTeam({ roomId: selectedRoomId, teamId, userId, displayName })
       setSelectedTeamId(teamId)
-      setStatusMessage('Team joined.')
+      setStatusMessage('You joined the team. Your team space is ready.')
     } catch (err) {
       handleError(err, 'Could not join team.')
+    }
+  }
+
+  async function handleDeleteTeam(teamId) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await deleteTeam({ roomId: selectedRoomId, teamId, userId, displayName })
+      if (selectedTeamId === teamId) setSelectedTeamId('')
+      setStatusMessage('Team removed successfully.')
+    } catch (err) {
+      handleError(err, 'Could not delete team.')
+    }
+  }
+
+  async function handleDeleteRoomLog(eventId) {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      await deleteRoomEvent({ eventId })
+      setStatusMessage('Activity log deleted.')
+    } catch (err) {
+      handleError(err, 'Could not delete activity log.')
+    }
+  }
+
+  async function handleClearRoomLogs() {
+    setError('')
+    setStatusMessage('')
+
+    try {
+      const count = await clearRoomEvents({ roomId: selectedRoomId })
+      setStatusMessage(`${count} activity log${count === 1 ? '' : 's'} cleared.`)
+    } catch (err) {
+      handleError(err, 'Could not clear room activity logs.')
     }
   }
 
@@ -603,7 +712,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
 
     try {
       const teamId = selectedTeamId || currentPlayer?.teamId
-      const result = await submitTeamSolution({
+      const result = await runScoredAction('Scoring the team solution...', () => submitTeamSolution({
         roomId: selectedRoomId,
         teamId,
         userId,
@@ -613,7 +722,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         selectedAiCardIds,
         selectedAiCardTitles,
         explanation
-      })
+      }))
 
       resetPlayForm()
       setStatusMessage(`Team solution submitted. Score: ${result.totalScore}/100.`)
@@ -643,7 +752,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
 
     try {
       const debateId = selectedDebate?.debateId || `${selectedRoomId}_debate`
-      const result = await submitDebateArgument({
+      const result = await runScoredAction('Scoring your debate argument...', () => submitDebateArgument({
         roomId: selectedRoomId,
         debateId,
         userId,
@@ -651,7 +760,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         argumentText: explanation,
         selectedAiCardIds,
         selectedAiCardTitles
-      })
+      }))
 
       resetPlayForm()
       setStatusMessage(`Debate argument submitted. Score: ${result.totalScore}/100.`)
@@ -725,7 +834,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
     setStatusMessage('')
 
     try {
-      const result = await submitTournamentRound({
+      const result = await runScoredAction('Scoring this tournament round...', () => submitTournamentRound({
         roomId: selectedRoomId,
         tournamentId: selectedTournament?.tournamentId,
         userId,
@@ -736,7 +845,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         selectedAiCardIds,
         selectedAiCardTitles,
         explanation
-      })
+      }))
 
       resetPlayForm()
       setStatusMessage(`Round submitted. Round score: ${result.totalScore}/100.`)
@@ -771,8 +880,10 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
   }
 
   return (
-    <div style={styles.panel}>
+    <div className="mpRootPanel" style={styles.panel}>
       <style>{pageCss}</style>
+      <ScoringOverlay active={Boolean(scoringMessage)} message={scoringMessage} progress={scoringProgress} />
+      <PopupToast toast={toast} onClose={() => setToast(null)} />
 
       <div className="mpHero">
         <div>
@@ -941,6 +1052,7 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           onSelectedTeamIdChange={setSelectedTeamId}
           onCreateTeam={handleCreateTeam}
           onJoinTeam={handleJoinTeam}
+          onDeleteTeam={handleDeleteTeam}
           onStartTeam={handleStartTeamMode}
           onSubmitTeam={handleSubmitTeam}
           onDebatePromptChange={setDebatePrompt}
@@ -956,6 +1068,8 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
           onSetTournamentRound={handleSetTournamentRound}
           onSubmitTournamentRound={handleSubmitTournamentRound}
           onFinishTournament={handleFinishTournament}
+          onDeleteRoomLog={handleDeleteRoomLog}
+          onClearRoomLogs={handleClearRoomLogs}
           onBack={() => setPage('home')}
         />
       )}
@@ -975,6 +1089,40 @@ function MultiplayerHubScreen({ fullName = 'Player' }) {
         </div>
       )}
     </div>
+  )
+}
+
+function ScoringOverlay({ active, message, progress }) {
+  if (!active) return null
+
+  return (
+    <div className="mpScoringOverlay" role="status" aria-live="polite">
+      <div className="mpScoringCard">
+        <div className="mpScoringSpinner"></div>
+        <p style={styles.eyebrow}>Scoring in progress</p>
+        <h3 style={styles.smallCardTitle}>{message || 'Scoring your answer...'}</h3>
+        <p style={styles.smallCardText}>Please wait while the system checks relevance, feasibility, SDG alignment, creativity and responsible use.</p>
+        <div className="mpProgressTrack">
+          <span style={{ width: `${Math.max(8, Math.min(100, progress))}%` }}></span>
+        </div>
+        <small style={mutedTextStyle}>{Math.round(Math.max(8, Math.min(100, progress)))}% complete</small>
+      </div>
+    </div>
+  )
+}
+
+function PopupToast({ toast, onClose }) {
+  if (!toast) return null
+  const toneClass = toast.tone === 'error' ? 'error' : toast.tone === 'info' ? 'info' : 'success'
+
+  return (
+    <aside className={`mpToast ${toneClass}`} role="alert">
+      <div>
+        <strong>{toast.title || 'Notification'}</strong>
+        <p>{toast.message}</p>
+      </div>
+      <button type="button" onClick={onClose} aria-label="Close notification">×</button>
+    </aside>
   )
 }
 
@@ -1287,6 +1435,7 @@ function RoomPage(props) {
     onSelectedTeamIdChange,
     onCreateTeam,
     onJoinTeam,
+    onDeleteTeam,
     onStartTeam,
     onSubmitTeam,
     onDebatePromptChange,
@@ -1302,6 +1451,8 @@ function RoomPage(props) {
     onSetTournamentRound,
     onSubmitTournamentRound,
     onFinishTournament,
+    onDeleteRoomLog,
+    onClearRoomLogs,
     onBack
   } = props
 
@@ -1386,6 +1537,7 @@ function RoomPage(props) {
           onExplanationChange={onExplanationChange}
           onCreateTeam={onCreateTeam}
           onJoinTeam={onJoinTeam}
+          onDeleteTeam={onDeleteTeam}
           onStart={onStartTeam}
           onSubmit={onSubmitTeam}
         />
@@ -1446,7 +1598,7 @@ function RoomPage(props) {
       )}
 
       <EndRoomPanel isHost={isHost} room={selectedRoom} endReason={endReason} onEndReasonChange={onEndReasonChange} onEnd={onEndRoom} />
-      <RoomTimeline events={selectedRoomDetails.roomEvents || []} />
+      <RoomTimeline events={selectedRoomDetails.roomEvents || []} onDelete={onDeleteRoomLog} onClear={onClearRoomLogs} />
     </div>
   )
 }
@@ -1707,24 +1859,39 @@ function ChallengeModePanel(props) {
 }
 
 function TeamModePanel(props) {
+  const userTeamId = props.selectedTeamId || props.currentPlayer?.teamId || ''
+  const userCreatedTeam = props.teams.find((team) => team.createdBy === props.currentPlayer?.userId)
+  const canCreateTeam = !userCreatedTeam && !userTeamId
+
   return (
     <ModePanel title="Team workflow" description="Create or join a team, host starts the room, then each team submits one shared solution.">
       <div className="mpTwoCol">
         <form onSubmit={props.onCreateTeam} style={formGridStyle}>
           <label style={fieldStyle}>
             Team name
-            <input value={props.teamName} onChange={(event) => props.onTeamNameChange(event.target.value)} placeholder="Example: Team Ubuntu" style={inputStyle} />
+            <input value={props.teamName} onChange={(event) => props.onTeamNameChange(event.target.value)} placeholder="Example: Team Ubuntu" style={inputStyle} disabled={!canCreateTeam} />
           </label>
-          <button type="submit" style={primaryButtonStyle}>Create Team</button>
+          <button type="submit" disabled={!canCreateTeam} style={canCreateTeam ? primaryButtonStyle : disabledButtonStyle}>Create Team</button>
+          <p style={styles.smallCardText}>Each player can create one team and can only belong to one team in this room.</p>
         </form>
         <div style={cardStyle}>
           <p style={styles.eyebrow}>Teams</p>
-          {props.teams.length === 0 ? <p style={styles.smallCardText}>No teams yet.</p> : props.teams.map((team) => (
-            <div key={team.teamId} style={itemStyle}>
-              <strong style={itemTitleStyle}>{team.teamName}</strong>
-              <button type="button" onClick={() => props.onJoinTeam(team.teamId)} style={smallButtonStyle}>Join Team</button>
-            </div>
-          ))}
+          {props.teams.length === 0 ? <p style={styles.smallCardText}>No teams yet.</p> : props.teams.map((team) => {
+            const isMyTeam = userTeamId === team.teamId
+            const canDelete = team.createdBy === props.currentPlayer?.userId
+            return (
+              <div key={team.teamId} style={isMyTeam ? highlightedItemStyle : itemStyle}>
+                <div>
+                  <strong style={itemTitleStyle}>{team.teamName}</strong>
+                  <p style={styles.smallCardText}>{isMyTeam ? 'You are in this team' : `Created by ${team.createdByName || 'Player'}`}</p>
+                </div>
+                <div style={buttonRowStyle}>
+                  <button type="button" disabled={Boolean(userTeamId && !isMyTeam)} onClick={() => props.onJoinTeam(team.teamId)} style={userTeamId && !isMyTeam ? smallButtonSecondaryStyle : smallButtonStyle}>{isMyTeam ? 'Joined' : 'Join Team'}</button>
+                  {canDelete && <button type="button" onClick={() => props.onDeleteTeam(team.teamId)} style={smallButtonSecondaryStyle}>Delete Team</button>}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
       {props.isHost && <ProblemSetupForm problemCardId={props.problemCardId} problemTitle={props.problemTitle} onProblemCardIdChange={props.onProblemCardIdChange} onProblemTitleChange={props.onProblemTitleChange} onSubmit={props.onStart} buttonText="Start Team Room" />}
@@ -1978,15 +2145,20 @@ function EndRoomPanel({ isHost, room, endReason, onEndReasonChange, onEnd }) {
   )
 }
 
-function RoomTimeline({ events }) {
+function RoomTimeline({ events, onDelete, onClear }) {
   return (
     <div style={sectionCardStyle}>
-      <p style={styles.eyebrow}>Live timeline</p>
-      <h3 style={styles.smallCardTitle}>Room activity log</h3>
+      <div style={styles.rowBetween}>
+        <div>
+          <p style={styles.eyebrow}>Live timeline</p>
+          <h3 style={styles.smallCardTitle}>Room activity log</h3>
+        </div>
+        {events.length > 0 && <button type="button" onClick={onClear} style={smallButtonSecondaryStyle}>Clear all logs</button>}
+      </div>
       {events.length === 0 ? (
         <p style={styles.smallCardText}>No activity yet.</p>
       ) : (
-        <div style={listStyle}>
+        <div className="mpLogScroll" style={listStyle}>
           {events.map((event) => (
             <article key={event.eventId || event.firestoreId} style={itemStyle}>
               <div>
@@ -1994,6 +2166,7 @@ function RoomTimeline({ events }) {
                 <p style={styles.smallCardText}>{event.message}</p>
                 <small style={mutedTextStyle}>{formatTime(event.createdAt)} • {event.actorDisplayName || 'System'}</small>
               </div>
+              <button type="button" onClick={() => onDelete(event.firestoreId || event.eventId)} style={smallButtonSecondaryStyle}>Delete</button>
             </article>
           ))}
         </div>
@@ -2165,6 +2338,7 @@ const fieldStyle = {
 
 const inputStyle = {
   width: '100%',
+  boxSizing: 'border-box',
   padding: '13px 15px',
   borderRadius: 16,
   border: '1px solid rgba(139, 92, 40, 0.24)',
@@ -2180,6 +2354,7 @@ const textAreaStyle = {
 }
 
 const primaryButtonStyle = {
+  maxWidth: '100%',
   border: 0,
   borderRadius: 999,
   padding: '13px 18px',
@@ -2190,6 +2365,7 @@ const primaryButtonStyle = {
 }
 
 const secondaryButtonStyle = {
+  maxWidth: '100%',
   border: '1px solid rgba(139, 92, 40, 0.22)',
   borderRadius: 999,
   padding: '12px 16px',
@@ -2236,11 +2412,13 @@ const listStyle = {
 }
 
 const itemStyle = {
+  minWidth: 0,
   padding: 14,
   borderRadius: 18,
   border: '1px solid rgba(139, 92, 40, 0.14)',
   background: 'rgba(255,255,255,0.62)',
   display: 'flex',
+  flexWrap: 'wrap',
   gap: 12,
   justifyContent: 'space-between',
   alignItems: 'flex-start'
@@ -2574,6 +2752,223 @@ const pageCss = `
 .mpAiChoice:disabled {
   cursor: not-allowed;
   opacity: .48;
+}
+
+.mpRootPanel {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.mpRootPanel *,
+.mpRootPanel *::before,
+.mpRootPanel *::after {
+  box-sizing: border-box;
+}
+
+.mpRootPanel input,
+.mpRootPanel select,
+.mpRootPanel textarea,
+.mpRootPanel button {
+  max-width: 100%;
+}
+
+.mpScoringOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(32, 22, 14, 0.58);
+  backdrop-filter: blur(12px);
+}
+
+.mpScoringCard {
+  width: min(430px, 100%);
+  padding: 26px;
+  border-radius: 30px;
+  border: 1px solid rgba(244, 210, 138, 0.35);
+  background: linear-gradient(135deg, rgba(255, 248, 235, 0.96), rgba(244, 210, 138, 0.92));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+
+.mpScoringSpinner {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 5px solid rgba(154, 106, 34, 0.2);
+  border-top-color: rgba(92, 53, 18, 0.95);
+  animation: mpSpin 0.88s linear infinite;
+}
+
+.mpProgressTrack {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(92, 53, 18, 0.16);
+}
+
+.mpProgressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9a6a22, #5c3512);
+  transition: width 0.22s ease;
+}
+
+@keyframes mpSpin {
+  to { transform: rotate(360deg); }
+}
+
+.mpToast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10000;
+  width: min(380px, calc(100vw - 36px));
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(154, 106, 34, 0.26);
+  background: rgba(255, 248, 235, 0.96);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.25);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.mpToast strong {
+  color: #3b2817;
+  font-weight: 950;
+}
+
+.mpToast p {
+  margin: 5px 0 0;
+  color: #5c3512;
+  line-height: 1.45;
+}
+
+.mpToast button {
+  border: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  background: rgba(139, 92, 40, 0.13);
+  color: #5c3512;
+  font-weight: 900;
+}
+
+.mpToast.success { border-color: rgba(34, 197, 94, 0.32); }
+.mpToast.error { border-color: rgba(153, 27, 27, 0.32); }
+.mpToast.info { border-color: rgba(37, 99, 235, 0.25); }
+
+.mpLogScroll {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  scroll-behavior: smooth;
+}
+
+.mpLogScroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mpLogScroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(139, 92, 40, 0.32);
+}
+
+.mpAiChoiceGrid {
+  min-height: 110px;
+  align-items: stretch;
+}
+
+.mpAiChoice strong,
+.mpAiChoice small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .mpRootPanel {
+    padding: 16px !important;
+    border-radius: 22px !important;
+  }
+
+  .mpRootPanel h1,
+  .mpRootPanel h2,
+  .mpRootPanel h3 {
+    overflow-wrap: anywhere;
+  }
+
+  .mpHero {
+    padding: 18px !important;
+    border-radius: 22px !important;
+  }
+
+  .mpHeroTitle {
+    font-size: clamp(1.75rem, 11vw, 2.35rem);
+    line-height: 1.03;
+  }
+
+  .mpLobbyTitle {
+    font-size: clamp(1.35rem, 9vw, 2rem);
+  }
+
+  .mpPageTabs,
+  .mpModeNav,
+  .mpModeSelectGrid,
+  .mpTwoCol,
+  .mpRoomGrid,
+  .mpFilterGrid,
+  .mpStepGrid,
+  .mpTimeGrid,
+  .mpMiniGrid,
+  .mpAiChoiceGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .mpHeroStatsWrap {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .mpButtonRow,
+  .mpLifecycleHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mpButtonRow button,
+  .mpPageTabs button,
+  .mpModeNav button,
+  .mpRootPanel form button {
+    width: 100%;
+  }
+
+  .mpRootPanel article {
+    width: 100%;
+  }
+
+  .mpLogScroll {
+    max-height: 300px;
+    padding-right: 2px;
+  }
+
+  .mpToast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+  }
 }
 `
 

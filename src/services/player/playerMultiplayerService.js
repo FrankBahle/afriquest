@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -11,6 +12,9 @@ import {
   where
 } from 'firebase/firestore'
 import { COLLECTIONS, cleanFirestoreData, db } from '../firebaseService'
+import { gradeExplanation } from '../scoringService'
+import problemCardData from '../../assets/json/grit_lab_africa_problem_cards.json'
+import aiCards from '../../data/aiCards'
 
 const C = {
   users: COLLECTIONS.users || 'users',
@@ -35,6 +39,7 @@ const C = {
 }
 
 const terminalStatuses = ['completed', 'ended', 'cancelled', 'archived', 'expired']
+const problemCards = Array.isArray(problemCardData?.cards) ? problemCardData.cards : []
 
 function cleanText(value) {
   return String(value || '').trim()
@@ -104,6 +109,143 @@ function validateMultiplayerSubmission({ explanation, aiIds }) {
   if (countWords(explanation) > 100) throw new Error('The explanation must be 100 words or less.')
   if (!Array.isArray(aiIds) || aiIds.length < 1) throw new Error('Choose at least one solution card.')
   if (aiIds.length > 3) throw new Error('Choose a maximum of three solution cards.')
+}
+
+function normaliseArray(value) {
+  if (Array.isArray(value)) return value.map(cleanText).filter(Boolean)
+  return splitCsv(value)
+}
+
+function getProblemCardForScoring({ problemCardId, problemTitle, room }) {
+  const safeId = cleanText(problemCardId || room?.currentProblemId)
+  const existing = problemCards.find((card) => String(card.id) === String(safeId)) || {}
+  const safeTitle = cleanText(problemTitle || room?.currentProblemTitle || existing.title || room?.currentQuestTitle || 'Multiplayer problem')
+
+  return {
+    id: existing.id || safeId || room?.roomId || 'multiplayer_problem',
+    title: safeTitle,
+    problem_type: existing.problem_type || existing.problemType || existing.type || room?.mode || 'Multiplayer challenge',
+    problem: existing.problem || existing.description || existing.the_problem || safeTitle,
+    examples: normaliseArray(existing.examples),
+    think_about_it: existing.think_about_it || existing.thinkAboutIt || existing.question || 'How can the selected solution cards solve this problem responsibly?',
+    sdg_goals: normaliseArray(existing.sdg_goals || existing.sdgGoals || existing.sdgs)
+  }
+}
+
+function getAiCardsForScoring(aiIds, aiTitles) {
+  const titles = normaliseArray(aiTitles)
+  return aiIds.map((id, index) => {
+    const existing = aiCards.find((card) => String(card.id) === String(id))
+
+    if (existing) {
+      return existing
+    }
+
+    return {
+      id,
+      title: titles[index] || `Selected solution card ${index + 1}`,
+      type: 'Selected solution card',
+      canDo: "Supports the player's proposed solution.",
+      examples: [],
+      question: 'How does this card help solve the problem?'
+    }
+  })
+}
+
+function normaliseEvaluationResult(result, explanation) {
+  const totalScore = Math.max(1, Math.min(100, Math.round(toNumber(
+    result?.total_score ?? result?.totalScore ?? result?.score ?? result?.GLA_coin_earned ?? result?.glaCoinEarned,
+    autoScore(explanation)
+  ))))
+
+  const feedback = result?.feedback || {}
+  const overallFeedback = cleanText(feedback.overall || result?.overall_feedback || result?.overallFeedback) ||
+    'Your multiplayer solution was scored using the full game rubric.'
+  const improvement = cleanText(feedback.improvement || result?.improvement || result?.improvement_suggestion) ||
+    'Improve your answer by explaining how the idea will work, who will use it, and why it fits the African context.'
+
+  return {
+    totalScore,
+    glaCoinEarned: toNumber(result?.GLA_coin_earned ?? result?.glaCoinEarned, totalScore),
+    subScores: result?.sub_scores || result?.subScores || {},
+    feedback: overallFeedback,
+    improvement,
+    feedbackByArea: result?.feedback_by_area || result?.feedbackByArea || feedback.by_area || {},
+    certificationTrackable: Boolean(result?.certification_trackable ?? result?.certificationTrackable ?? totalScore >= 50),
+    rawEvaluation: result || {}
+  }
+}
+
+async function evaluateMultiplayerSubmission({ room, problemCardId, problemTitle, selectedAiCardIds, selectedAiCardTitles, explanation }) {
+  const aiIds = splitCsv(selectedAiCardIds)
+  const aiTitles = splitCsv(selectedAiCardTitles)
+  validateMultiplayerSubmission({ explanation, aiIds })
+
+  const problemCard = getProblemCardForScoring({ problemCardId, problemTitle, room })
+  const selectedAiCards = getAiCardsForScoring(aiIds, aiTitles)
+  const evaluation = await gradeExplanation({
+    problemCard,
+    selectedSolution: selectedAiCards[0],
+    selectedAiCards,
+    userExplanation: cleanText(explanation)
+  })
+
+  return {
+    aiIds,
+    aiTitles: selectedAiCards.map((card) => card.title),
+    problemCard,
+    selectedAiCards,
+    ...normaliseEvaluationResult(evaluation, explanation)
+  }
+}
+
+async function saveEvaluationArtifacts({ room, attemptId, userId, displayName, mode, evaluation }) {
+  if (!attemptId || !room?.roomId) return
+  const now = nowDate()
+
+  await Promise.all([
+    setDoc(doc(db, C.scores, `${attemptId}_score`), safeClean({
+      scoreId: `${attemptId}_score`,
+      attemptId,
+      roomId: room.roomId,
+      roomCode: room.roomCode,
+      userId,
+      displayName: cleanText(displayName) || 'Player',
+      multiplayerMode: mode,
+      totalScore: evaluation.totalScore,
+      glaCoinEarned: evaluation.glaCoinEarned,
+      certificationTrackable: evaluation.certificationTrackable,
+      createdAt: now,
+      updatedAt: now,
+      isSchema: false
+    }), { merge: true }),
+    setDoc(doc(db, C.subScores, `${attemptId}_subscores`), safeClean({
+      subScoreId: `${attemptId}_subscores`,
+      attemptId,
+      roomId: room.roomId,
+      roomCode: room.roomCode,
+      userId,
+      multiplayerMode: mode,
+      subScores: evaluation.subScores,
+      createdAt: now,
+      updatedAt: now,
+      isSchema: false
+    }), { merge: true }),
+    setDoc(doc(db, C.feedback, `${attemptId}_feedback`), safeClean({
+      feedbackId: `${attemptId}_feedback`,
+      attemptId,
+      roomId: room.roomId,
+      roomCode: room.roomCode,
+      userId,
+      multiplayerMode: mode,
+      overall: evaluation.feedback,
+      improvement: evaluation.improvement,
+      byArea: evaluation.feedbackByArea,
+      createdAt: now,
+      updatedAt: now,
+      isSchema: false
+    }), { merge: true })
+  ])
 }
 
 function buildWorkflowStage(mode, status) {
@@ -671,7 +813,18 @@ export async function requestToJoinRoom({ roomId, userId, displayName, message =
     title: 'Room join request',
     message: `${displayName || 'A player'} requested to join ${room.roomName}.`,
     actionType: 'open_room_request',
-    actionData: { roomId, requestId, roomCode: room.roomCode }
+    actionData: { roomId, requestId, roomCode: room.roomCode, mode: room.mode }
+  })
+
+  await createNotification({
+    recipientUserId: userId,
+    senderUserId: room.createdBy,
+    senderDisplayName: room.createdByName,
+    type: 'room_request_sent',
+    title: 'Access request sent',
+    message: `Your request to join ${room.roomName} was sent to the host.`,
+    actionType: 'open_room',
+    actionData: { roomId, requestId, roomCode: room.roomCode, mode: room.mode }
   })
 
   await addRoomEvent({
@@ -716,7 +869,18 @@ export async function acceptRoomJoinRequest({ requestId, hostUserId }) {
     title: 'Room request accepted',
     message: `Your request to join ${room.roomName} was accepted.`,
     actionType: 'open_room',
-    actionData: { roomId: request.roomId, roomCode: request.roomCode }
+    actionData: { roomId: request.roomId, roomCode: request.roomCode, mode: room.mode }
+  })
+
+  await createNotification({
+    recipientUserId: hostUserId,
+    senderUserId: request.fromUserId,
+    senderDisplayName: request.fromDisplayName,
+    type: 'room_request_approved',
+    title: 'Player added to room',
+    message: `${request.fromDisplayName || 'The player'} has been added to ${room.roomName}.`,
+    actionType: 'open_room',
+    actionData: { roomId: request.roomId, roomCode: request.roomCode, mode: room.mode }
   })
 
   return request.roomId
@@ -731,22 +895,29 @@ export async function declineRoomJoinRequest({ requestId, hostUserId }) {
   const room = await getRoom(request.roomId)
   if (room.createdBy !== hostUserId) throw new Error('Only the host can decline this request.')
 
-  await updateDoc(doc(db, C.multiplayerRoomRequests, requestId), {
-    status: 'declined',
-    respondedAt: nowDate(),
-    updatedAt: nowDate()
-  })
-
   await createNotification({
     recipientUserId: request.fromUserId,
     senderUserId: hostUserId,
     senderDisplayName: room.createdByName,
     type: 'room_request_declined',
     title: 'Room request declined',
-    message: `Your request to join ${room.roomName} was declined.`,
+    message: `Your request to join ${room.roomName} was declined and removed.`,
     actionType: '',
-    actionData: { roomId: request.roomId }
+    actionData: { roomId: request.roomId, roomCode: request.roomCode, mode: room.mode }
   })
+
+  await createNotification({
+    recipientUserId: hostUserId,
+    senderUserId: request.fromUserId,
+    senderDisplayName: request.fromDisplayName,
+    type: 'room_request_removed',
+    title: 'Access request removed',
+    message: `The declined request for ${room.roomName} was removed from the lobby queue.`,
+    actionType: 'open_room',
+    actionData: { roomId: request.roomId, roomCode: request.roomCode, mode: room.mode }
+  })
+
+  await deleteDoc(doc(db, C.multiplayerRoomRequests, requestId))
 
   return request.roomId
 }
@@ -758,7 +929,7 @@ export async function createRoomInvite({ roomId, recipientUserId, senderUserId, 
   if (isRoomExpired(room)) throw new Error('This room has expired.')
   if (isRoomClosed(room)) throw new Error('This room has already ended.')
 
-  return createNotification({
+  const inviteId = await createNotification({
     recipientUserId: resolvedRecipientUserId,
     senderUserId,
     senderDisplayName,
@@ -768,6 +939,29 @@ export async function createRoomInvite({ roomId, recipientUserId, senderUserId, 
     actionType: 'accept_room_invite',
     actionData: { roomId, roomCode: room.roomCode, mode: room.mode }
   })
+
+  await createNotification({
+    recipientUserId: senderUserId,
+    senderUserId: resolvedRecipientUserId,
+    senderDisplayName: resolvedRecipientUserId,
+    type: 'room_invite_sent',
+    title: 'Room invite sent',
+    message: `Your invite to ${room.roomName} was sent.`,
+    actionType: 'open_room',
+    actionData: { roomId, roomCode: room.roomCode, mode: room.mode }
+  })
+
+  await addRoomEvent({
+    roomId,
+    roomCode: room.roomCode,
+    eventType: 'room_invite_sent',
+    actorUserId: senderUserId,
+    actorDisplayName: senderDisplayName,
+    message: `${senderDisplayName || 'A player'} sent a room invite.`,
+    metadata: { recipientUserId: resolvedRecipientUserId }
+  })
+
+  return inviteId
 }
 
 export async function acceptRoomInvite({ notificationId, userId, displayName }) {
@@ -779,15 +973,44 @@ export async function acceptRoomInvite({ notificationId, userId, displayName }) 
 
   await joinMultiplayerRoom({ userId, displayName, roomCode: room.roomCode, skipApproval: true })
   await markNotificationRead(notificationId)
+
+  if (notification.senderUserId) {
+    await createNotification({
+      recipientUserId: notification.senderUserId,
+      senderUserId: userId,
+      senderDisplayName: displayName,
+      type: 'room_invite_accepted',
+      title: 'Invite accepted',
+      message: `${displayName || 'A player'} accepted your invite to ${room.roomName}.`,
+      actionType: 'open_room',
+      actionData: { roomId, roomCode: room.roomCode, mode: room.mode }
+    })
+  }
+
   return roomId
 }
 
 export async function declineRoomInvite(notificationId) {
-  await updateDoc(doc(db, C.playerNotifications, notificationId), {
-    status: 'declined',
-    readAt: nowDate(),
-    updatedAt: nowDate()
-  })
+  const notificationSnapshot = await getDoc(doc(db, C.playerNotifications, notificationId))
+  if (!notificationSnapshot.exists()) return
+  const notification = notificationSnapshot.data()
+  const roomId = notification.actionData?.roomId
+  const room = roomId ? await getRoom(roomId).catch(() => null) : null
+
+  if (notification.senderUserId) {
+    await createNotification({
+      recipientUserId: notification.senderUserId,
+      senderUserId: notification.recipientUserId,
+      senderDisplayName: notification.recipientUserId,
+      type: 'room_invite_declined',
+      title: 'Invite declined',
+      message: `Your invite${room?.roomName ? ` to ${room.roomName}` : ''} was declined and removed.`,
+      actionType: roomId ? 'open_room' : '',
+      actionData: roomId ? { roomId, roomCode: room?.roomCode || '', mode: room?.mode || '' } : {}
+    })
+  }
+
+  await deleteDoc(doc(db, C.playerNotifications, notificationId))
 }
 
 export async function markNotificationRead(notificationId) {
@@ -943,11 +1166,17 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
   if (isRoomClosed(room)) throw new Error('This room has ended.')
   if (!userId) throw new Error('User ID is required.')
 
-  const aiIds = splitCsv(selectedAiCardIds)
-  const aiTitles = splitCsv(selectedAiCardTitles)
-  validateMultiplayerSubmission({ explanation, aiIds })
-
-  const totalScore = autoScore(explanation, aiIds)
+  const evaluation = await evaluateMultiplayerSubmission({
+    room: { ...room, roomId },
+    problemCardId,
+    problemTitle,
+    selectedAiCardIds,
+    selectedAiCardTitles,
+    explanation
+  })
+  const aiIds = evaluation.aiIds
+  const aiTitles = evaluation.aiTitles
+  const totalScore = evaluation.totalScore
   const attemptId = `${roomId}_challenge_${userId}`
   const attemptRef = doc(db, C.attempts, attemptId)
   const attemptSnap = await getDoc(attemptRef)
@@ -971,7 +1200,12 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
     totalScore,
     bestScore,
     attemptNumber,
-    feedback: 'Challenge answer saved. Ranking uses the latest submitted score and keeps the best score for reference.',
+    feedback: evaluation.feedback,
+    improvement: evaluation.improvement,
+    subScores: evaluation.subScores,
+    feedbackByArea: evaluation.feedbackByArea,
+    glaCoinEarned: evaluation.glaCoinEarned,
+    certificationTrackable: evaluation.certificationTrackable,
     status: 'submitted',
     createdAt: previousAttempt.createdAt || nowDate(),
     submittedAt: nowDate(),
@@ -995,25 +1229,40 @@ export async function submitChallengeAttempt({ roomId, userId, displayName, prob
     isSchema: false
   }), { merge: true })
 
+  await saveEvaluationArtifacts({ room: { ...room, roomId }, attemptId, userId, displayName, mode: 'challenge', evaluation })
+
   await addRoomEvent({
     roomId,
     roomCode: room.roomCode,
     eventType: 'challenge_submitted',
     actorUserId: userId,
     actorDisplayName: displayName,
-    message: `${displayName || 'A player'} submitted a challenge answer.`,
+    message: `${displayName || 'A player'} submitted a challenge answer and received ${totalScore}/100.`,
     metadata: { totalScore, bestScore }
   })
 
-  await touchRoom(roomId, { workflowStage: 'challenge_scoring' })
+  await touchRoom(roomId, { workflowStage: 'challenge_scored' })
 
-  return { attemptId, totalScore, bestScore }
+  return { attemptId, totalScore, bestScore, feedback: evaluation.feedback }
 }
 
 export async function createTeam({ roomId, teamName, userId, displayName }) {
   if (!roomId) throw new Error('Open a room first.')
   if (!userId) throw new Error('User ID is required.')
   const room = await getRoom(roomId)
+  const existingTeams = (await getCollectionRows(C.teams)).filter((team) => team.roomId === roomId && team.status !== 'deleted' && !isSchemaDocument(team))
+  const alreadyCreated = existingTeams.find((team) => team.createdBy === userId)
+  const players = await getRoomPlayers(roomId)
+  const currentPlayer = players.find((player) => player.userId === userId)
+
+  if (alreadyCreated) {
+    throw new Error('You already created a team in this room. Delete your team first before creating another one.')
+  }
+
+  if (currentPlayer?.teamId) {
+    throw new Error('You are already in a team. Leave or delete your current team before creating another one.')
+  }
+
   const teamId = `${roomId}_team_${Date.now()}`
 
   await setDoc(doc(db, C.teams, teamId), safeClean({
@@ -1032,6 +1281,57 @@ export async function createTeam({ roomId, teamName, userId, displayName }) {
 
   await joinTeam({ roomId, teamId, userId, displayName })
   await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'team_created', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} created a team.` })
+  await notifyRoomPlayers({ roomId, actorUserId: userId, actorDisplayName: displayName, type: 'team_created', title: 'Team created', message: `${displayName || 'A player'} created a new team in ${room.roomName}.` })
+  return teamId
+}
+
+export async function deleteTeam({ roomId, teamId, userId, displayName }) {
+  if (!roomId) throw new Error('Room ID is required.')
+  if (!teamId) throw new Error('Team ID is required.')
+  if (!userId) throw new Error('User ID is required.')
+
+  const room = await getRoom(roomId)
+  const teamSnapshot = await getDoc(doc(db, C.teams, teamId))
+  if (!teamSnapshot.exists()) throw new Error('Team was not found.')
+  const team = teamSnapshot.data()
+
+  if (team.createdBy !== userId) {
+    throw new Error('Only the player who created this team can delete it.')
+  }
+
+  const players = await getRoomPlayers(roomId)
+  await Promise.all(players
+    .filter((player) => player.teamId === teamId)
+    .map((player) => setDoc(doc(db, C.roomPlayers, `${roomId}_${player.userId}`), safeClean({
+      ...player,
+      teamId: '',
+      status: 'joined',
+      updatedAt: nowDate(),
+      lastSeenAt: nowDate(),
+      isSchema: false
+    }), { merge: true })))
+
+  await deleteDoc(doc(db, C.teams, teamId))
+  await deleteDoc(doc(db, C.teamSessions, `${roomId}_${teamId}`)).catch(() => {})
+
+  await addRoomEvent({
+    roomId,
+    roomCode: room.roomCode,
+    eventType: 'team_deleted',
+    actorUserId: userId,
+    actorDisplayName: displayName,
+    message: `${displayName || 'A player'} deleted ${team.teamName || 'a team'}.`
+  })
+
+  await notifyRoomPlayers({
+    roomId,
+    actorUserId: userId,
+    actorDisplayName: displayName,
+    type: 'team_deleted',
+    title: 'Team removed',
+    message: `${team.teamName || 'A team'} was removed from ${room.roomName}.`
+  })
+
   return teamId
 }
 
@@ -1040,6 +1340,12 @@ export async function joinTeam({ roomId, teamId, userId, displayName }) {
   if (!teamId) throw new Error('Choose a team first.')
   if (!userId) throw new Error('User ID is required.')
   const room = await getRoom(roomId)
+  const players = await getRoomPlayers(roomId)
+  const currentPlayer = players.find((player) => player.userId === userId)
+
+  if (currentPlayer?.teamId && currentPlayer.teamId !== teamId) {
+    throw new Error('You are already in a team. Each player can only belong to one team in a room.')
+  }
 
   await setDoc(doc(db, C.roomPlayers, `${roomId}_${userId}`), safeClean({
     roomPlayerId: `${roomId}_${userId}`,
@@ -1056,6 +1362,17 @@ export async function joinTeam({ roomId, teamId, userId, displayName }) {
   }), { merge: true })
 
   await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'team_joined', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} joined a team.` })
+  await notifyRoomPlayers({ roomId, actorUserId: userId, actorDisplayName: displayName, type: 'team_joined', title: 'Player joined a team', message: `${displayName || 'A player'} joined a team in ${room.roomName}.` })
+  await createNotification({
+    recipientUserId: userId,
+    senderUserId: room.createdBy,
+    senderDisplayName: room.createdByName,
+    type: 'team_joined_confirmation',
+    title: 'Team joined',
+    message: `You have joined a team in ${room.roomName}.`,
+    actionType: 'open_room',
+    actionData: { roomId, roomCode: room.roomCode, mode: room.mode }
+  })
   return teamId
 }
 
@@ -1064,11 +1381,17 @@ export async function submitTeamSolution({ roomId, teamId, userId, displayName, 
   const room = await getRoom(roomId)
   if (isRoomClosed(room)) throw new Error('This room has ended.')
 
-  const aiIds = splitCsv(selectedAiCardIds)
-  const aiTitles = splitCsv(selectedAiCardTitles)
-  validateMultiplayerSubmission({ explanation, aiIds })
-
-  const totalScore = autoScore(explanation, aiIds)
+  const evaluation = await evaluateMultiplayerSubmission({
+    room: { ...room, roomId },
+    problemCardId,
+    problemTitle,
+    selectedAiCardIds,
+    selectedAiCardTitles,
+    explanation
+  })
+  const aiIds = evaluation.aiIds
+  const aiTitles = evaluation.aiTitles
+  const totalScore = evaluation.totalScore
   const teamSessionId = `${roomId}_${teamId}`
   const sessionRef = doc(db, C.teamSessions, teamSessionId)
   const sessionSnap = await getDoc(sessionRef)
@@ -1090,7 +1413,12 @@ export async function submitTeamSolution({ roomId, teamId, userId, displayName, 
     sharedExplanation: cleanText(explanation),
     totalScore,
     bestScore,
-    feedback: 'Team solution saved and scored. The latest team answer remains visible to everyone in the room.',
+    feedback: evaluation.feedback,
+    improvement: evaluation.improvement,
+    subScores: evaluation.subScores,
+    feedbackByArea: evaluation.feedbackByArea,
+    glaCoinEarned: evaluation.glaCoinEarned,
+    certificationTrackable: evaluation.certificationTrackable,
     status: 'submitted',
     createdAt: previousSession.createdAt || nowDate(),
     submittedAt: nowDate(),
@@ -1105,9 +1433,10 @@ export async function submitTeamSolution({ roomId, teamId, userId, displayName, 
     updatedAt: nowDate()
   })
 
-  await touchRoom(roomId, { workflowStage: 'team_submissions' })
-  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'team_solution_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a team solution.`, metadata: { totalScore, bestScore } })
-  return { teamSessionId, totalScore, bestScore }
+  await saveEvaluationArtifacts({ room: { ...room, roomId }, attemptId: teamSessionId, userId, displayName, mode: 'team', evaluation })
+  await touchRoom(roomId, { workflowStage: 'team_scored' })
+  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'team_solution_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a team solution and received ${totalScore}/100.`, metadata: { totalScore, bestScore } })
+  return { teamSessionId, totalScore, bestScore, feedback: evaluation.feedback }
 }
 
 export async function updateDebatePrompt({ roomId, prompt, actorUserId, actorDisplayName }) {
@@ -1144,11 +1473,17 @@ export async function submitDebateArgument({ roomId, debateId, userId, displayNa
   const room = await getRoom(roomId)
   if (isRoomClosed(room)) throw new Error('This room has ended.')
 
-  const aiIds = splitCsv(selectedAiCardIds)
-  const aiTitles = splitCsv(selectedAiCardTitles)
-  validateMultiplayerSubmission({ explanation: argumentText, aiIds })
-
-  const totalScore = autoScore(argumentText, aiIds)
+  const evaluation = await evaluateMultiplayerSubmission({
+    room: { ...room, roomId, currentProblemId: debateId || `${roomId}_debate`, currentProblemTitle: room.currentQuestTitle || 'Debate prompt' },
+    problemCardId: debateId || `${roomId}_debate`,
+    problemTitle: room.currentQuestTitle || 'Debate prompt',
+    selectedAiCardIds,
+    selectedAiCardTitles,
+    explanation: argumentText
+  })
+  const aiIds = evaluation.aiIds
+  const aiTitles = evaluation.aiTitles
+  const totalScore = evaluation.totalScore
   const safeDebateId = debateId || `${roomId}_debate`
   const attemptId = `${safeDebateId}_${userId}`
   const attemptRef = doc(db, C.attempts, attemptId)
@@ -1173,7 +1508,12 @@ export async function submitDebateArgument({ roomId, debateId, userId, displayNa
     argumentText: cleanText(argumentText),
     totalScore,
     bestScore,
-    feedback: 'Debate argument saved. Players can vote for the strongest categories.',
+    feedback: evaluation.feedback,
+    improvement: evaluation.improvement,
+    subScores: evaluation.subScores,
+    feedbackByArea: evaluation.feedbackByArea,
+    glaCoinEarned: evaluation.glaCoinEarned,
+    certificationTrackable: evaluation.certificationTrackable,
     status: 'submitted',
     createdAt: previousAttempt.createdAt || nowDate(),
     submittedAt: nowDate(),
@@ -1181,9 +1521,10 @@ export async function submitDebateArgument({ roomId, debateId, userId, displayNa
     isSchema: false
   }), { merge: true })
 
+  await saveEvaluationArtifacts({ room: { ...room, roomId }, attemptId, userId, displayName, mode: 'debate', evaluation })
   await touchRoom(roomId, { workflowStage: 'debate_voting' })
-  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'debate_argument_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a debate argument.`, metadata: { totalScore, bestScore } })
-  return { attemptId, totalScore, bestScore }
+  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'debate_argument_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted a debate argument and received ${totalScore}/100.`, metadata: { totalScore, bestScore } })
+  return { attemptId, totalScore, bestScore, feedback: evaluation.feedback }
 }
 
 export async function submitDebateVote({ roomId, debateId, voterUserId, voterDisplayName, targetUserId, targetDisplayName, voteCategory }) {
@@ -1297,11 +1638,17 @@ export async function submitTournamentRound({ roomId, tournamentId, userId, disp
   if (isRoomClosed(room)) throw new Error('This room has ended.')
   const safeTournamentId = tournamentId || `${roomId}_tournament`
   const safeRound = toNumber(roundNumber || room.currentRound, 1)
-  const aiIds = splitCsv(selectedAiCardIds)
-  const aiTitles = splitCsv(selectedAiCardTitles)
-  validateMultiplayerSubmission({ explanation, aiIds })
-
-  const totalScore = autoScore(explanation, aiIds)
+  const evaluation = await evaluateMultiplayerSubmission({
+    room: { ...room, roomId },
+    problemCardId,
+    problemTitle,
+    selectedAiCardIds,
+    selectedAiCardTitles,
+    explanation
+  })
+  const aiIds = evaluation.aiIds
+  const aiTitles = evaluation.aiTitles
+  const totalScore = evaluation.totalScore
   const attemptId = `${roomId}_tournament_${userId}_round_${safeRound}`
   const attemptRef = doc(db, C.attempts, attemptId)
   const previousAttemptSnap = await getDoc(attemptRef)
@@ -1330,7 +1677,12 @@ export async function submitTournamentRound({ roomId, tournamentId, userId, disp
     selectedAiCardTitles: aiTitles,
     explanation: cleanText(explanation),
     totalScore,
-    feedback: 'Tournament round saved. Resubmitting the same round updates your round score instead of duplicating it.',
+    feedback: evaluation.feedback,
+    improvement: evaluation.improvement,
+    subScores: evaluation.subScores,
+    feedbackByArea: evaluation.feedbackByArea,
+    glaCoinEarned: evaluation.glaCoinEarned,
+    certificationTrackable: evaluation.certificationTrackable,
     status: 'submitted',
     createdAt: previousAttempt?.createdAt || nowDate(),
     submittedAt: nowDate(),
@@ -1353,9 +1705,10 @@ export async function submitTournamentRound({ roomId, tournamentId, userId, disp
     isSchema: false
   }), { merge: true })
 
-  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'tournament_round_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted round ${safeRound}.`, metadata: { totalScore } })
+  await saveEvaluationArtifacts({ room: { ...room, roomId }, attemptId, userId, displayName, mode: 'tournament', evaluation })
+  await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'tournament_round_submitted', actorUserId: userId, actorDisplayName: displayName, message: `${displayName || 'A player'} submitted round ${safeRound} and received ${totalScore}/100.`, metadata: { totalScore } })
   await recalculateTournamentRanks({ roomId, tournamentId: safeTournamentId })
-  return { attemptId, totalScore }
+  return { attemptId, totalScore, feedback: evaluation.feedback }
 }
 
 async function recalculateTournamentRanks({ roomId, tournamentId }) {
@@ -1385,6 +1738,20 @@ export async function finishTournamentRoom({ roomId, tournamentId, actorUserId, 
 
   await endMultiplayerRoom({ roomId, actorUserId, actorDisplayName, endReason: 'Tournament finished.' })
   await addRoomEvent({ roomId, roomCode: room.roomCode, eventType: 'tournament_finished', actorUserId, actorDisplayName, message: 'Tournament completed and leaderboard finalised.' })
+}
+
+export async function deleteRoomEvent({ eventId }) {
+  if (!eventId) throw new Error('Activity log ID is required.')
+  await deleteDoc(doc(db, C.multiplayerRoomEvents, eventId))
+  return eventId
+}
+
+export async function clearRoomEvents({ roomId }) {
+  if (!roomId) throw new Error('Room ID is required.')
+  const rows = await getCollectionRows(C.multiplayerRoomEvents)
+  const roomRows = rows.filter((event) => event.roomId === roomId && !isSchemaDocument(event))
+  await Promise.all(roomRows.map((event) => deleteDoc(doc(db, C.multiplayerRoomEvents, event.firestoreId || event.eventId))))
+  return roomRows.length
 }
 
 export async function endMultiplayerRoom({ roomId, actorUserId, actorDisplayName, endReason = 'Room ended by host.' }) {

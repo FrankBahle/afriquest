@@ -409,9 +409,6 @@ async function callScoringengine({ apiKey, model, prompt }) {
       response_format: {
         type: 'json_object'
       },
-      thinking: {
-        type: 'disabled'
-      },
       temperature: 0.2,
       max_tokens: 1000
     })
@@ -444,13 +441,7 @@ export async function handler(event) {
 
   try {
     const apiKey = process.env.DEEPSEEK_API_KEY
-    const requestedModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
-
-    const model = ['deepseek-v4-flash', 'deepseek-v4-pro'].includes(
-      requestedModel
-    )
-      ? requestedModel
-      : 'deepseek-v4-flash'
+    const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat'
 
     if (!apiKey) {
       return jsonResponse(500, {

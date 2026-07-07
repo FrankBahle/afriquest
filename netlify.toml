@@ -9,6 +9,11 @@
   directory = "netlify/functions"
 
 [[redirects]]
+  from = "/api/deepseek/explain"
+  to = "/.netlify/functions/deepseek-explain"
+  status = 200
+
+[[redirects]]
   from = "/api/scoring/explain"
   to = "/.netlify/functions/scoring-explain"
   status = 200
