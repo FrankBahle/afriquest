@@ -386,6 +386,123 @@ function normaliseEvaluation(parsed, userExplanation) {
   }
 }
 
+function normaliseJsonCandidate(content) {
+  return String(content || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/:\s*True([,}\]])/g, ': true$1')
+    .replace(/:\s*False([,}\]])/g, ': false$1')
+    .replace(/:\s*None([,}\]])/g, ': null$1')
+    .trim()
+}
+
+function parseScoringJson(content) {
+  const extracted = extractJsonObject(content)
+  const candidates = [
+    extracted,
+    cleanJsonResponse(content),
+    normaliseJsonCandidate(extracted),
+    normaliseJsonCandidate(cleanJsonResponse(content))
+  ].filter(Boolean)
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+
+      if (Array.isArray(parsed)) {
+        const firstObject = parsed.find((item) => item && typeof item === 'object')
+        if (firstObject) {
+          return firstObject
+        }
+      }
+
+      if (parsed && typeof parsed === 'object') {
+        return parsed
+      }
+    } catch {
+      // Try the next possible JSON shape.
+    }
+  }
+
+  return null
+}
+
+function includesAny(text, terms) {
+  const cleaned = String(text || '').toLowerCase()
+  return terms.some((term) => cleaned.includes(term))
+}
+
+function buildSafeFallbackEvaluation({ problemCard, selectedAiCards = [], selectedSolution, userExplanation }) {
+  const answer = String(userExplanation || '').trim()
+  const wordCount = answer.split(/\s+/).filter(Boolean).length
+  const selectedCount = selectedAiCards.length || (selectedSolution ? 1 : 0)
+  const weak = isVeryWeakExplanation(answer)
+
+  if (weak) {
+    return normaliseEvaluation(
+      {
+        total_score: 8,
+        feedback: {
+          overall: 'Your answer is too short to show a clear solution, so it receives a low score. You can still improve it and try again.',
+          improvement: 'Explain which AI card you chose, who it helps, and how the solution would work in a real community.'
+        }
+      },
+      answer
+    )
+  }
+
+  const selectedText = [
+    ...selectedAiCards.map((card) => `${card?.title || ''} ${card?.type || ''} ${card?.canDo || ''}`),
+    selectedSolution ? `${selectedSolution.title || ''} ${selectedSolution.description || ''}` : ''
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  const problemText = `${problemCard?.title || ''} ${problemCard?.problem_type || ''} ${problemCard?.problem || ''} ${(problemCard?.sdg_goals || []).join(' ')}`.toLowerCase()
+  const combinedText = `${answer} ${selectedText} ${problemText}`
+
+  const feasibilityTerms = ['app', 'platform', 'system', 'school', 'community', 'municipality', 'teacher', 'clinic', 'mobile', 'sms', 'data', 'internet', 'offline', 'cost', 'low cost', 'train', 'report', 'monitor', 'connect']
+  const africanTerms = ['africa', 'african', 'local', 'community', 'rural', 'township', 'language', 'low cost', 'mobile', 'school', 'youth', 'public', 'informal']
+  const sdgTerms = ['sdg', 'goal', 'education', 'health', 'job', 'work', 'poverty', 'food', 'water', 'energy', 'environment', 'equality', 'innovation', 'sustainable']
+  const ethicsTerms = ['privacy', 'consent', 'safe', 'safety', 'secure', 'fair', 'bias', 'human', 'oversight', 'inclusive', 'inclusion', 'protect']
+
+  const subScores = {
+    ai_card_relevance: clamp(8 + selectedCount * 3 + (selectedText && answer.toLowerCase().split(/\s+/).some((word) => selectedText.includes(word) && word.length > 4) ? 4 : 0), 1, 20),
+    combination_strength: clamp(selectedCount >= 2 ? 9 + (includesAny(answer, ['together', 'combine', 'also', 'first', 'then']) ? 3 : 0) : 6, 1, 15),
+    practical_feasibility: clamp(6 + Math.min(7, feasibilityTerms.filter((term) => includesAny(combinedText, [term])).length) + (wordCount >= 35 ? 2 : 0), 1, 15),
+    african_context_and_feasibility: clamp(5 + Math.min(8, africanTerms.filter((term) => includesAny(combinedText, [term])).length) + (wordCount >= 45 ? 2 : 0), 1, 15),
+    sdg_alignment: clamp(5 + Math.min(8, sdgTerms.filter((term) => includesAny(combinedText, [term])).length) + ((problemCard?.sdg_goals || []).length ? 2 : 0), 1, 15),
+    creativity_and_innovation: clamp(4 + (wordCount >= 30 ? 2 : 0) + (includesAny(answer, ['new', 'innovative', 'create', 'personalised', 'automated', 'predict', 'recommend']) ? 3 : 0), 1, 10),
+    ethical_and_responsible_use: clamp(3 + Math.min(6, ethicsTerms.filter((term) => includesAny(combinedText, [term])).length) + (wordCount >= 50 ? 1 : 0), 1, 10)
+  }
+
+  const totalScore = clamp(sumSubScores(subScores), 1, 100)
+
+  return normaliseEvaluation(
+    {
+      total_score: totalScore,
+      sub_scores: subScores,
+      feedback: {
+        overall: 'Your solution was scored successfully. The marks reflect how well your answer connects the selected AI cards to the problem, feasibility, SDG value, African context, creativity, and responsible use.',
+        improvement: 'To improve, add clearer implementation steps, mention users or partners, and include privacy, safety, or fairness where relevant.'
+      },
+      feedback_by_area: {
+        ai_card_relevance: 'The selected AI cards are checked against the problem and the explanation you wrote.',
+        combination_strength: 'Higher marks are awarded when the answer explains how the selected cards work together.',
+        practical_feasibility: 'The answer should show practical steps, users, tools, access, cost, or implementation details.',
+        african_context_and_feasibility: 'The answer is stronger when it considers local realities such as language, access, communities, schools, or connectivity.',
+        sdg_alignment: 'The answer should clearly support the SDG goals connected to the problem card.',
+        creativity_and_innovation: 'The answer earns more marks when it adds a useful, original, or locally inspiring idea.',
+        ethical_and_responsible_use: 'The answer should mention privacy, safety, fairness, inclusion, or human oversight where needed.'
+      }
+    },
+    answer
+  )
+}
+
+
 async function callScoringEngine({ apiUrl, apiKey, model, prompt }) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 22000)
@@ -418,7 +535,7 @@ async function callScoringEngine({ apiUrl, apiKey, model, prompt }) {
           type: 'disabled'
         },
         temperature: 0.1,
-        max_tokens: 650
+        max_tokens: 1200
       })
     })
 
@@ -519,7 +636,7 @@ Examples: ${(card.examples || []).slice(0, 3).join(', ')}`
 Description: ${selectedSolution.description}`
 
     const prompt = `
-Return valid JSON only.
+Return valid JSON only. Do not include markdown, comments, explanations outside JSON, or trailing commas. Keep every feedback sentence short.
 
 You are evaluating a player's GRIT Lab Africa AI/SDG card game solution.
 
@@ -565,7 +682,7 @@ The total_score must equal the sum of the sub_scores.
 The total_score must be between 1 and 100.
 GLA_coin_earned must equal total_score.
 
-Return exactly this JSON shape:
+Return exactly this JSON shape using double quotes for every key and string:
 
 {
   "total_score": 72,
@@ -631,18 +748,16 @@ Return exactly this JSON shape:
       })
     }
 
-    let parsed
+    const parsed = parseScoringJson(content)
 
-    try {
-      parsed = JSON.parse(content)
-    } catch {
-      return jsonResponse(502, {
-        error:
-          'The scoring engine returned an invalid JSON response. Please try again.'
-      })
-    }
-
-    const normalised = normaliseEvaluation(parsed, userExplanation)
+    const normalised = parsed
+      ? normaliseEvaluation(parsed, userExplanation)
+      : buildSafeFallbackEvaluation({
+          problemCard,
+          selectedAiCards,
+          selectedSolution,
+          userExplanation
+        })
 
     return jsonResponse(200, normalised)
   } catch (err) {
