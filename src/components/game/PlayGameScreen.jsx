@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { styles, colors } from './gameStyles'
 import { ActionButton, MetricCard } from './ui'
 
@@ -43,6 +43,7 @@ function PlayGameScreen({
 }) {
 
   const [draggedAiCard, setDraggedAiCard] = useState(null)
+const dragFrameRef = useRef(null)
 const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
 const [isOverSolutionBoard, setIsOverSolutionBoard] = useState(false)
 const [dropPulseCardId, setDropPulseCardId] = useState('')
@@ -62,6 +63,14 @@ useEffect(() => {
   return () => clearInterval(interval)
 }, [aiLoading])
 
+useEffect(() => {
+  return () => {
+    if (dragFrameRef.current) {
+      window.cancelAnimationFrame(dragFrameRef.current)
+    }
+  }
+}, [])
+
 const problemCardCode = round?.card?.id ? `PC${round.card.id}` : 'PC'
 
 function handleSubmitClick() {
@@ -75,10 +84,11 @@ function handleSubmitClick() {
 
 
 function getAiCardImage(card) {
+  const numericId = Number(card?.id)
+  if (Number.isFinite(numericId) && numericId >= 1 && numericId <= 30) return `/assets/images/optimized/AI_${numericId}.webp`
   if (card?.frontImageUrl) return card.frontImageUrl
   if (card?.backImageUrl) return card.backImageUrl
   if (card?.fileName) return `/assets/images/${card.fileName}`
-  if (card?.id) return `/assets/images/AI_${card.id}.png`
 
   return card1
 }
@@ -125,10 +135,20 @@ function handleAiDragMove(event) {
   if (!draggedAiCard) return
   if (event.clientX === 0 && event.clientY === 0) return
 
-  setDragPosition({ x: event.clientX, y: event.clientY })
+  const nextPosition = { x: event.clientX, y: event.clientY }
+  if (dragFrameRef.current) return
+
+  dragFrameRef.current = window.requestAnimationFrame(() => {
+    setDragPosition(nextPosition)
+    dragFrameRef.current = null
+  })
 }
 
 function handleAiDragEnd() {
+  if (dragFrameRef.current) {
+    window.cancelAnimationFrame(dragFrameRef.current)
+    dragFrameRef.current = null
+  }
   setDraggedAiCard(null)
   setIsOverSolutionBoard(false)
 }
@@ -200,7 +220,7 @@ function handleSolutionDrop(event) {
                 }}
               >
                 <div style={problemCardFaceStyle}>
-<img src={card1} alt="Problem card cover" style={cardImageStyle} />              <div style={coverOverlayStyle}></div>
+<img src={card1} alt="Problem card cover" style={cardImageStyle} loading="eager" decoding="async" fetchPriority="high" />              <div style={coverOverlayStyle}></div>
                   <div style={coverTopStyle}>
                     <span style={problemCodeBadgeStyle}>{problemCardCode}</span>
                     <span style={coverPillStyle}>Problem Card</span>
@@ -281,9 +301,12 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
                       >
                         <div style={aiCardFaceStyle}>
 <img
-  src={card.frontImageUrl || card.backImageUrl || `/assets/images/AI_${card.id}.png` || card1}
+  src={getAiCardImage(card)}
   alt={card.title}
   style={cardImageStyle}
+  loading={Number(card.id) <= 6 ? 'eager' : 'lazy'}
+  decoding="async"
+  fetchPriority={Number(card.id) <= 3 ? 'high' : 'auto'}
 />                          <div style={aiCoverOverlayStyle}></div>
                           <div style={aiCoverContentStyle}>
                             <p style={{ ...styles.eyebrow, color: colors.lightGold }}>AI Card</p>
@@ -421,6 +444,7 @@ className={draggedAiCard?.id === card.id ? 'aiCardDraggingSource' : ''}
   src={getAiCardImage(draggedAiCard)}
   alt={draggedAiCard.title}
   style={cardImageStyle}
+  decoding="async"
 />           <div style={dragPreviewContentStyle}>
               <div style={selectedAiTopRowStyle}>
                 <span style={selectedAiCodeBadgeStyle}>AC{draggedAiCard.id}</span>

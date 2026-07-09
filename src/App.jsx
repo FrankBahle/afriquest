@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
-import AuthModal from './components/AuthModal'
 import { useAuth } from './context/AuthContext'
 
 
@@ -37,23 +36,11 @@ const backgroundMedia = [
 ]
 const GameHome = lazy(() => import('./components/GameHome'))
 const AdminApp = lazy(() => import('./components/admin/AdminApp'))
+const AuthModal = lazy(() => import('./components/AuthModal'))
 
 
 function App() {
-  const [appLoading, setAppLoading] = useState(true)
   const isAdminRoute = window.location.pathname.toLowerCase().startsWith('/admin')
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAppLoading(false)
-    }, 1600)
-
-    return () => clearTimeout(timer)
-  }, [])
-
-  if (appLoading) {
-    return <LoadingScreen />
-  }
 
   if (isAdminRoute) {
     return (
@@ -160,6 +147,9 @@ function PlayerApp() {
   className={`heroMedia ${isFading ? 'mediaFadeOut' : 'mediaFadeIn'}`}
   src={currentMedia.src}
   alt="African innovation background"
+  loading="eager"
+  decoding="async"
+  fetchPriority="high"
 />
 
               <div className="heroOverlay"></div>
@@ -444,10 +434,12 @@ function PlayerApp() {
       </footer>
 
       {showAuthModal && (
-        <AuthModal
-          initialMode={authMode}
-          onClose={() => setShowAuthModal(false)}
-        />
+        <Suspense fallback={null}>
+          <AuthModal
+            initialMode={authMode}
+            onClose={() => setShowAuthModal(false)}
+          />
+        </Suspense>
       )}
     </main>
   )

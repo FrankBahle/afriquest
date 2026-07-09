@@ -1193,7 +1193,7 @@ function applyPartialTranslations(text, languageCode) {
 
 
 const API_TRANSLATION_CACHE_PREFIX = 'gla_api_translation_cache_'
-const MAX_API_TEXTS_PER_REQUEST = 90
+const MAX_API_TEXTS_PER_REQUEST = 45
 const MAX_API_TEXT_LENGTH = 650
 
 function getApiCacheKey(languageCode) {
@@ -1395,9 +1395,25 @@ function useDomTranslator(languageCode, phraseMap, enabled) {
       }
     }
 
-    const scheduleTranslate = (delay = 100) => {
+    const scheduleTranslate = (delay = 180) => {
       if (translateTimer) window.clearTimeout(translateTimer)
       translateTimer = window.setTimeout(translatePage, delay)
+    }
+
+    if (!enabled || code === 'en') {
+      if (document.body) {
+        restoreTextNodes(document.body)
+        restoreAttributes(document.body)
+      }
+
+      return () => {
+        isDisposed = true
+        if (translateTimer) window.clearTimeout(translateTimer)
+        if (document.body) {
+          restoreTextNodes(document.body)
+          restoreAttributes(document.body)
+        }
+      }
     }
 
     translatePage()

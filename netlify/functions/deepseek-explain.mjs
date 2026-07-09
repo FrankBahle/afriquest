@@ -387,48 +387,58 @@ function normaliseEvaluation(parsed, userExplanation) {
 }
 
 async function callScoringengine({ apiKey, model, prompt }) {
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are the GRIT Lab Africa AI card game evaluator. Score strictly using the seven-area rubric. Return JSON only. Do not return markdown. The response must be valid JSON.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      response_format: {
-        type: 'json_object'
-      },
-      temperature: 0.2,
-      max_tokens: 1000
-    })
-  })
-
-  const rawText = await response.text()
-
-  let data = {}
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 22000)
 
   try {
-    data = JSON.parse(rawText)
-  } catch {
-    data = {
-      rawText
-    }
-  }
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are the GRIT Lab Africa AI card game evaluator. Score strictly using the seven-area rubric. Return compact valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        response_format: {
+          type: 'json_object'
+        },
+        temperature: 0.1,
+        max_tokens: 650
+      })
+    })
 
-  return {
-    response,
-    data
+    const rawText = await response.text()
+
+    let data = {}
+
+    try {
+      data = JSON.parse(rawText)
+    } catch {
+      data = { rawText }
+    }
+
+    return { response, data }
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const response = new Response(JSON.stringify({ message: 'The scoring engine took too long to respond.' }), { status: 504 })
+      return { response, data: { message: 'The scoring engine took too long to respond.' } }
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -492,8 +502,7 @@ export async function handler(event) {
               return `${index + 1}. ${card.title}
 Type: ${card.type}
 What it can do: ${card.canDo}
-Examples: ${(card.examples || []).join(', ')}
-Card question: ${card.question}`
+Examples: ${(card.examples || []).slice(0, 3).join(', ')}`
             })
             .join('\n\n')
         : `Title: ${selectedSolution.title}
@@ -580,7 +589,7 @@ Return exactly this JSON shape:
     let content = ''
     let deepseekError = ''
 
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
+    for (let attempt = 1; attempt <= 1; attempt += 1) {
       const { response, data } = await callScoringengine({
         apiKey,
         model,

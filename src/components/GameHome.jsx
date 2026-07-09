@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { gradeExplanation } from '../services/scoringService'
 import problemCards from '../assets/json/grit_lab_africa_problem_cards.json'
 import card1 from '../assets/images/card1.jpeg'
@@ -9,19 +9,6 @@ import JourneyTabs from './game/JourneyTabs'
 import GameGuideScreen from './game/GameGuideScreen'
 import ProblemSelectionScreen from './game/ProblemSelectionScreen'
 import PlayGameScreen from './game/PlayGameScreen'
-import ScoringFeedbackScreen from './game/ScoringFeedbackScreen'
-import RetryAttemptScreen from './game/RetryAttemptScreen'
-import PlayerDashboardScreen from './game/PlayerDashboardScreen'
-import CoinHistoryScreen from './game/CoinHistoryScreen'
-import CertificateScreen from './game/CertificateScreen'
-import PlayerProfileScreen from './game/PlayerProfileScreen'
-import AchievementsBadgesScreen from './game/AchievementsBadgesScreen'
-import LevelsProgressionScreen from './game/LevelsProgressionScreen'
-import LeaderboardScreen from './game/LeaderboardScreen'
-import AnalyticsDashboardScreen from './game/AnalyticsDashboardScreen'
-import AccessibilityScreen from './game/AccessibilityScreen'
-import MultiplayerHubScreen from './game/MultiplayerHubScreen'
-import RewardsLaunchScreen from './game/RewardsLaunchScreen'
 import { LoadingPage } from './game/ui'
 import { usePlayerLanguage } from '../hooks/usePlayerLanguage'
 import { DEFAULT_PLAYER_SETTINGS, getPlayerSettings, applyPlayerSettingsToDocument } from '../services/player/playerSettingsService'
@@ -44,7 +31,22 @@ import { seedRemainingCollections } from '../utils/seedRemainingCollections'
 import { seedMultiplayerRealtimeCollections } from '../utils/seedMultiplayerRealtimeCollections'
 import { resetAndSeedAiCards } from '../utils/resetAndSeedAiCards'
 
-const card2 = "/assets/images/AI_1.png"
+const ScoringFeedbackScreen = lazy(() => import('./game/ScoringFeedbackScreen'))
+const RetryAttemptScreen = lazy(() => import('./game/RetryAttemptScreen'))
+const PlayerDashboardScreen = lazy(() => import('./game/PlayerDashboardScreen'))
+const CoinHistoryScreen = lazy(() => import('./game/CoinHistoryScreen'))
+const CertificateScreen = lazy(() => import('./game/CertificateScreen'))
+const PlayerProfileScreen = lazy(() => import('./game/PlayerProfileScreen'))
+const AchievementsBadgesScreen = lazy(() => import('./game/AchievementsBadgesScreen'))
+const LevelsProgressionScreen = lazy(() => import('./game/LevelsProgressionScreen'))
+const LeaderboardScreen = lazy(() => import('./game/LeaderboardScreen'))
+const AnalyticsDashboardScreen = lazy(() => import('./game/AnalyticsDashboardScreen'))
+const AccessibilityScreen = lazy(() => import('./game/AccessibilityScreen'))
+const MultiplayerHubScreen = lazy(() => import('./game/MultiplayerHubScreen'))
+const RewardsLaunchScreen = lazy(() => import('./game/RewardsLaunchScreen'))
+
+const card2 = "/assets/images/optimized/AI_1.webp"
+const aiCardImageUrl = (id) => `/assets/images/optimized/AI_${id}.webp`
 function createRound(cards) {
   if (!cards.length) return { card: null }
   return { card: cards[Math.floor(Math.random() * cards.length)] }
@@ -138,10 +140,19 @@ function normaliseAiCard(card) {
     canDo: card.canDo || card.whatThisAiCanDo || card.what_it_can_do || '',
     examples: card.examples || [],
     question: card.question || card.thinkAboutIt || card.think_about_it || '',
-    frontImageUrl: card.frontImageUrl || `/assets/images/AI_${id}.png`,
-    backImageUrl: card.backImageUrl || `/assets/images/AI_${id}.png`,
-    fileName: card.fileName || `AI_${id}.png`
+    frontImageUrl: Number.isFinite(id) ? aiCardImageUrl(id) : card.frontImageUrl || card.backImageUrl || '',
+    backImageUrl: Number.isFinite(id) ? aiCardImageUrl(id) : card.backImageUrl || card.frontImageUrl || '',
+    fileName: card.fileName || `AI_${id}.webp`
   }
+}
+
+
+function ScreenSuspense({ children }) {
+  return (
+    <Suspense fallback={<LoadingPage title="Opening page" message="Preparing this section..." compact />}>
+      {children}
+    </Suspense>
+  )
 }
 
 function GameHome({ currentUser }) {
@@ -482,9 +493,10 @@ const coinTransaction = {
           totalGlaCoinEarned: toSafeNumber(previousDashboard.totalGlaCoinEarned) + savedAttempt.glaCoinEarned
         }
       })
-      await refreshPlayerProgressFromAttempts(currentUser.uid)
-      await loadPlayerDashboard()
       setScreen('score')
+      refreshPlayerProgressFromAttempts(currentUser.uid)
+        .then(() => loadPlayerDashboard({ silent: true }))
+        .catch((error) => console.error('Could not refresh progress in the background.', error))
     } catch (err) {
       setAiError(err.message || 'The scoring engine could not score the explanation.')
     } finally {
@@ -635,7 +647,6 @@ useEffect(() => {
 
 useEffect(() => {
   async function loadCardsFromFirestore() {
-    setCardLoading(true)
     setCardError('')
 
     try {
@@ -662,10 +673,10 @@ useEffect(() => {
   loadCardsFromFirestore()
 }, [])
 
-async function loadPlayerDashboard() {
+async function loadPlayerDashboard({ silent = false } = {}) {
   if (!currentUser?.uid) return
 
-  setDashboardLoading(true)
+  if (!silent) setDashboardLoading(true)
   setDashboardError('')
 
   try {
@@ -708,7 +719,7 @@ async function loadPlayerDashboard() {
     console.error(error)
     setDashboardError('Could not load dashboard data from Firestore.')
   } finally {
-    setDashboardLoading(false)
+    if (!silent) setDashboardLoading(false)
   }
 }
 
@@ -849,14 +860,7 @@ async function loadPlayerAnalytics() {
       </div>
 
       <main className="glaGameContent">
-        {cardLoading && journeyActive && (
-          <LoadingPage
-            title="Loading game cards"
-            message="Fetching problem cards and AI cards from the system before you continue."
-          />
-        )}
-
-        {!cardLoading && cardError && (
+        {cardError && (
           <p style={{ color: '#9a3412', fontWeight: 800 }}>
             {cardError}
           </p>
@@ -865,7 +869,7 @@ async function loadPlayerAnalytics() {
 
 
 
-        {!cardLoading && journeyActive && (
+        {journeyActive && (
           <JourneyTabs
             screen={screen}
             selectedProblemCount={selectedProblemIds.length}
@@ -875,14 +879,14 @@ async function loadPlayerAnalytics() {
           />
         )}
 
-        {!cardLoading && screen === 'intro' && (
+        {screen === 'intro' && (
           <GameGuideScreen
             firstName={firstName}
             onChooseProblems={() => setScreen('select')}
           />
         )}
 
-        {!cardLoading && screen === 'select' && (
+        {screen === 'select' && (
           <ProblemSelectionScreen
             cards={cards}
             selectedProblemIds={selectedProblemIds}
@@ -891,7 +895,7 @@ async function loadPlayerAnalytics() {
           />
         )}
 
-        {!cardLoading && screen === 'play' && (
+        {screen === 'play' && (
           <PlayGameScreen
             round={round}
             aiCards={availableAiCards}
@@ -932,7 +936,8 @@ averageScore={firestoreAverageScore}
           />
         )}
 
-        {!cardLoading && screen === 'score' && (
+        {screen === 'score' && (
+          <ScreenSuspense>
           <ScoringFeedbackScreen
             currentAttempt={firestoreLatestAttempt}
             currentProblem={round.card}
@@ -943,9 +948,11 @@ averageScore={firestoreAverageScore}
             onOpenDashboard={() => setScreen('dashboard')}
             onOpenCoinHistory={() => setScreen('coins')}
           />
+          </ScreenSuspense>
         )}
 
         {screen === 'retry' && (
+          <ScreenSuspense>
           <RetryAttemptScreen
             currentProblem={round.card}
             currentProblemAttemptStats={currentProblemAttemptStats}
@@ -953,6 +960,7 @@ averageScore={firestoreAverageScore}
             onCancel={() => setScreen(firestoreLatestAttempt ? 'score' : 'play')}
             onNextProblem={handleNextRound}
           />
+          </ScreenSuspense>
         )}
 
         {screen === 'dashboard' && dashboardLoading && (
@@ -970,6 +978,7 @@ averageScore={firestoreAverageScore}
               </p>
             )}
 
+            <ScreenSuspense>
             <PlayerDashboardScreen
               firstName={firstName}
               selectedProblemStack={firestoreSelectedProblemStack}
@@ -990,10 +999,12 @@ averageScore={firestoreAverageScore}
               onOpenCertificate={() => setScreen('certificate')}
               onOpenProfile={() => setScreen('profile')}
             />
+            </ScreenSuspense>
           </>
         )}
 
         {screen === 'coins' && (
+          <ScreenSuspense>
           <CoinHistoryScreen
   glaCoinBalance={firestoreGlaCoinBalance}
   totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
@@ -1001,6 +1012,7 @@ averageScore={firestoreAverageScore}
   coinTransactions={dashboardData?.coinTransactions || coinTransactions}
   onBackToDashboard={() => setScreen('dashboard')}
 />
+          </ScreenSuspense>
         )}
 
         {screen === 'certificate' && dashboardLoading && (
@@ -1011,6 +1023,7 @@ averageScore={firestoreAverageScore}
         )}
 
         {screen === 'certificate' && !dashboardLoading && (
+          <ScreenSuspense>
           <CertificateScreen
             fullName={firestoreFullName || fullName}
             completedProblems={dashboardData?.completedProblems ?? completedProblems}
@@ -1024,6 +1037,7 @@ averageScore={firestoreAverageScore}
             }
             onBackToDashboard={() => setScreen('dashboard')}
           />
+          </ScreenSuspense>
         )}
 
         {screen === 'profile' && dashboardLoading && (
@@ -1041,6 +1055,7 @@ averageScore={firestoreAverageScore}
               </p>
             )}
 
+            <ScreenSuspense>
             <PlayerProfileScreen
               profile={dashboardData?.profile || {}}
               fullName={firestoreFullName || fullName}
@@ -1061,39 +1076,48 @@ averageScore={firestoreAverageScore}
               profileMessage={profileMessage}
               onSaveProfile={handleSaveProfile}
             />
+            </ScreenSuspense>
           </>
         )}
 
         {screen === 'achievements' && (
+          <ScreenSuspense>
           <AchievementsBadgesScreen
             attempts={firestoreAttempts}
             completedProblems={firestoreCompletedProblems}
             totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
           />
+          </ScreenSuspense>
         )}
 
         {screen === 'levels' && (
+          <ScreenSuspense>
           <LevelsProgressionScreen
             totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
             completedProblems={firestoreCompletedProblems}
             averageScore={firestoreAverageScore}
           />
+          </ScreenSuspense>
         )}
 
         {screen === 'leaderboard' && (
+          <ScreenSuspense>
           <LeaderboardScreen
   fullName={firestoreFullName || fullName}
   averageScore={firestoreAverageScore}
   completedProblems={firestoreCompletedProblems}
   totalGlaCoinEarned={firestoreTotalGlaCoinEarned}
 />
+          </ScreenSuspense>
         )}
 
         {screen === 'hints' && (
+         <ScreenSuspense>
          <HintCenterScreen
   coinTransactions={dashboardData?.coinTransactions || coinTransactions}
   glaCoinSpentOnHints={dashboardData?.glaCoinSpentOnHints ?? glaCoinSpentOnHints}
 />
+         </ScreenSuspense>
         )}
 
         {screen === 'analytics' && analyticsLoading && (
@@ -1111,29 +1135,37 @@ averageScore={firestoreAverageScore}
               </p>
             )}
 
+            <ScreenSuspense>
             <AnalyticsDashboardScreen analyticsData={analyticsData} />
+            </ScreenSuspense>
           </>
         )}
 
 
         {screen === 'accessibility' && (
+          <ScreenSuspense>
           <AccessibilityScreen
             settings={accessibilitySettings}
             onChange={updateAccessibilitySetting}
             onSaved={handleSettingsSaved}
           />
+          </ScreenSuspense>
         )}
 
         {screen === 'multiplayer' && (
+          <ScreenSuspense>
           <MultiplayerHubScreen fullName={fullName} />
+          </ScreenSuspense>
         )}
 
         {screen === 'rewards' && (
+          <ScreenSuspense>
           <RewardsLaunchScreen
   completedProblems={firestoreCompletedProblems}
   averageScore={firestoreAverageScore}
   certificateUnlocked={firestoreCertificateUnlocked}
 />
+          </ScreenSuspense>
         )}
       </main>
     </section>

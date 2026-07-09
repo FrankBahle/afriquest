@@ -148,13 +148,15 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        await ensureUserDocument(user)
-      }
-
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user)
       setLoading(false)
+
+      if (user) {
+        ensureUserDocument(user).catch((error) => {
+          console.error('Could not sync player profile in the background.', error)
+        })
+      }
     })
 
     return unsubscribe
@@ -162,6 +164,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     currentUser,
+    authLoading: loading,
     register,
     login,
     logout
@@ -169,7 +172,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   )
 }

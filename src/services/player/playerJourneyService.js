@@ -1,5 +1,6 @@
 import {
   addDoc,
+  doc,
   getDoc,
   getDocs,
   increment,
@@ -7,7 +8,8 @@ import {
   query,
   setDoc,
   updateDoc,
-  where
+  where,
+  writeBatch
 } from 'firebase/firestore'
 import {
   PLAYER_COLLECTIONS,
@@ -320,145 +322,21 @@ export async function saveAttemptWithScoring({
   const selectedAiCardIds = getSelectedAiCardIds(selectedAiCards)
   const selectedAiCardTitles = getSelectedAiCardTitles(selectedAiCards)
   const normalisedResult = normaliseScoreResult(scoreResult)
+  const problemCardId = String(problemCard.id)
 
   const previousAttemptsQuery = query(
     playerCollection(PLAYER_COLLECTIONS.attempts),
     where('userId', '==', userId),
-    where('problemCardId', '==', String(problemCard.id))
+    where('problemCardId', '==', problemCardId)
   )
-
-  const previousAttemptsSnap = await getDocs(previousAttemptsQuery)
-  const attemptNumber = previousAttemptsSnap.size + 1
-
-  const attemptRef = await addDoc(
-    playerCollection(PLAYER_COLLECTIONS.attempts),
-    cleanData({
-      userId,
-      sessionId,
-      problemCardId: String(problemCard.id),
-      problemCardTitle: problemCard.title,
-      selectedAiCardIds,
-      selectedAiCardTitles,
-      explanation,
-      wordCount: explanation.trim().split(/\s+/).filter(Boolean).length,
-      attemptNumber,
-      totalScore: normalisedResult.totalScore,
-      glaCoinEarned: normalisedResult.glaCoinEarned,
-      subScores: normalisedResult.subScores,
-      areaFeedback: normalisedResult.areaFeedback,
-      overallFeedback: normalisedResult.overallFeedback,
-      improvementSuggestion: normalisedResult.improvementSuggestion,
-      certificationTrackable: normalisedResult.certificationTrackable,
-      status: 'scored',
-      isSchema: false,
-      createdAt: now(),
-      updatedAt: now()
-    })
-  )
-
-  await updateDoc(attemptRef, {
-    attemptId: attemptRef.id
-  })
-
-  const evaluationRef = await addDoc(
-    playerCollection(PLAYER_COLLECTIONS.deepSeekEvaluations),
-    cleanData({
-      evaluationId: '',
-      userId,
-      sessionId,
-      attemptId: attemptRef.id,
-      problemCardId: String(problemCard.id),
-      requestPayload: {
-        problemCard,
-        selectedAiCards,
-        explanation
-      },
-      responsePayload: deepSeekRawResponse || scoreResult,
-      status: 'completed',
-      isSchema: false,
-      createdAt: now()
-    })
-  )
-
-  await updateDoc(evaluationRef, {
-    evaluationId: evaluationRef.id
-  })
-
-  const scoreRef = await addDoc(
-    playerCollection(PLAYER_COLLECTIONS.scores),
-    cleanData({
-      scoreId: '',
-      userId,
-      sessionId,
-      attemptId: attemptRef.id,
-      evaluationId: evaluationRef.id,
-      problemCardId: String(problemCard.id),
-      rubricId: 'default',
-      totalScore: normalisedResult.totalScore,
-      glaCoinEarned: normalisedResult.glaCoinEarned,
-      isBestScore: false,
-      isSchema: false,
-      createdAt: now()
-    })
-  )
-
-  await updateDoc(scoreRef, {
-    scoreId: scoreRef.id
-  })
-
-  const subScoreTasks = Object.entries(normalisedResult.subScores).map(
-    ([rubricKey, score]) =>
-      addDoc(
-        playerCollection(PLAYER_COLLECTIONS.subScores),
-        cleanData({
-          userId,
-          sessionId,
-          attemptId: attemptRef.id,
-          scoreId: scoreRef.id,
-          rubricKey,
-          score: toSafeNumber(score),
-          maxScore: {
-            ai_card_relevance: 20,
-            combination_strength: 15,
-            practical_feasibility: 15,
-            african_context_and_feasibility: 15,
-            sdg_alignment: 15,
-            creativity_and_innovation: 10,
-            ethical_and_responsible_use: 10
-          }[rubricKey] || 0,
-          feedback: normalisedResult.areaFeedback?.[rubricKey] || '',
-          isSchema: false,
-          createdAt: now()
-        })
-      )
-  )
-
-  await Promise.all(subScoreTasks)
-
-  const feedbackRef = await addDoc(
-    playerCollection(PLAYER_COLLECTIONS.feedback),
-    cleanData({
-      feedbackId: '',
-      userId,
-      sessionId,
-      attemptId: attemptRef.id,
-      scoreId: scoreRef.id,
-      problemCardId: String(problemCard.id),
-      overallFeedback: normalisedResult.overallFeedback,
-      improvementSuggestion: normalisedResult.improvementSuggestion,
-      areaFeedback: normalisedResult.areaFeedback,
-      certificationTrackable: normalisedResult.certificationTrackable,
-      isSchema: false,
-      createdAt: now()
-    })
-  )
-
-  await updateDoc(feedbackRef, {
-    feedbackId: feedbackRef.id
-  })
 
   const userRef = getUserRef(userId)
-  const userSnapBeforeReward = await getDoc(userRef)
+  const [previousAttemptsSnap, userSnapBeforeReward] = await Promise.all([
+    getDocs(previousAttemptsQuery),
+    getDoc(userRef)
+  ])
+
+  const attemptNumber = previousAttemptsSnap.size + 1
   const currentBalance = userSnapBeforeReward.exists()
     ? toSafeNumber(userSnapBeforeReward.data().glaCoinBalance)
     : 0
@@ -467,57 +345,159 @@ export async function saveAttemptWithScoring({
     : 0
   const balanceAfter = currentBalance + normalisedResult.glaCoinEarned
 
-  const transactionRef = await addDoc(
-    playerCollection(PLAYER_COLLECTIONS.glaCoinTransactions),
-    cleanData({
-      transactionId: '',
-      userId,
-      type: 'earned',
-      amount: normalisedResult.glaCoinEarned,
-      balanceBefore: currentBalance,
-      balanceAfter,
-      reason: 'problem_score',
-      relatedAttemptId: attemptRef.id,
-      relatedHintRequestId: '',
-      problemCardId: String(problemCard.id),
-      sessionId,
-      isSchema: false,
-      createdAt: now()
-    })
-  )
+  const attemptRef = doc(playerCollection(PLAYER_COLLECTIONS.attempts))
+  const evaluationRef = doc(playerCollection(PLAYER_COLLECTIONS.deepSeekEvaluations))
+  const scoreRef = doc(playerCollection(PLAYER_COLLECTIONS.scores))
+  const feedbackRef = doc(playerCollection(PLAYER_COLLECTIONS.feedback))
+  const transactionRef = doc(playerCollection(PLAYER_COLLECTIONS.glaCoinTransactions))
+  const batch = writeBatch(playerCollection(PLAYER_COLLECTIONS.attempts).firestore)
+  const timestamp = now()
 
-  await updateDoc(transactionRef, {
-    transactionId: transactionRef.id
-  })
+  batch.set(attemptRef, cleanData({
+    attemptId: attemptRef.id,
+    userId,
+    sessionId,
+    problemCardId,
+    problemCardTitle: problemCard.title,
+    selectedAiCardIds,
+    selectedAiCardTitles,
+    explanation,
+    wordCount: explanation.trim().split(/\s+/).filter(Boolean).length,
+    attemptNumber,
+    totalScore: normalisedResult.totalScore,
+    glaCoinEarned: normalisedResult.glaCoinEarned,
+    subScores: normalisedResult.subScores,
+    areaFeedback: normalisedResult.areaFeedback,
+    overallFeedback: normalisedResult.overallFeedback,
+    improvementSuggestion: normalisedResult.improvementSuggestion,
+    certificationTrackable: normalisedResult.certificationTrackable,
+    status: 'scored',
+    isSchema: false,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }))
 
-  await updateDoc(userRef, {
-    glaCoinBalance: balanceAfter,
-    totalGlaCoinEarned: currentTotalEarned + normalisedResult.glaCoinEarned,
-    updatedAt: now()
-  })
-
-  await updateDoc(playerDoc(PLAYER_COLLECTIONS.gameSessions, sessionId), {
-    completedProblemCount: increment(1),
-    updatedAt: now()
-  })
-
-  await logSolutionSubmitted({
+  batch.set(evaluationRef, cleanData({
+    evaluationId: evaluationRef.id,
     userId,
     sessionId,
     attemptId: attemptRef.id,
-    problemCardId: String(problemCard.id),
-    selectedAiCardIds,
-    wordCount: explanation.trim().split(/\s+/).filter(Boolean).length
+    problemCardId,
+    requestPayload: {
+      problemCard,
+      selectedAiCards,
+      explanation
+    },
+    responsePayload: deepSeekRawResponse || scoreResult,
+    status: 'completed',
+    isSchema: false,
+    createdAt: timestamp
+  }))
+
+  batch.set(scoreRef, cleanData({
+    scoreId: scoreRef.id,
+    userId,
+    sessionId,
+    attemptId: attemptRef.id,
+    evaluationId: evaluationRef.id,
+    problemCardId,
+    rubricId: 'default',
+    totalScore: normalisedResult.totalScore,
+    glaCoinEarned: normalisedResult.glaCoinEarned,
+    isBestScore: false,
+    isSchema: false,
+    createdAt: timestamp
+  }))
+
+  Object.entries(normalisedResult.subScores).forEach(([rubricKey, score]) => {
+    const subScoreRef = doc(playerCollection(PLAYER_COLLECTIONS.subScores))
+    batch.set(subScoreRef, cleanData({
+      subScoreId: subScoreRef.id,
+      userId,
+      sessionId,
+      attemptId: attemptRef.id,
+      scoreId: scoreRef.id,
+      rubricKey,
+      score: toSafeNumber(score),
+      maxScore: {
+        ai_card_relevance: 20,
+        combination_strength: 15,
+        practical_feasibility: 15,
+        african_context_and_feasibility: 15,
+        sdg_alignment: 15,
+        creativity_and_innovation: 10,
+        ethical_and_responsible_use: 10
+      }[rubricKey] || 0,
+      feedback: normalisedResult.areaFeedback?.[rubricKey] || '',
+      isSchema: false,
+      createdAt: timestamp
+    }))
   })
 
-  await logScoreReceived({
+  batch.set(feedbackRef, cleanData({
+    feedbackId: feedbackRef.id,
     userId,
     sessionId,
     attemptId: attemptRef.id,
     scoreId: scoreRef.id,
-    problemCardId: String(problemCard.id),
-    totalScore: normalisedResult.totalScore,
-    glaCoinEarned: normalisedResult.glaCoinEarned
+    problemCardId,
+    overallFeedback: normalisedResult.overallFeedback,
+    improvementSuggestion: normalisedResult.improvementSuggestion,
+    areaFeedback: normalisedResult.areaFeedback,
+    certificationTrackable: normalisedResult.certificationTrackable,
+    isSchema: false,
+    createdAt: timestamp
+  }))
+
+  batch.set(transactionRef, cleanData({
+    transactionId: transactionRef.id,
+    userId,
+    type: 'earned',
+    amount: normalisedResult.glaCoinEarned,
+    balanceBefore: currentBalance,
+    balanceAfter,
+    reason: 'problem_score',
+    relatedAttemptId: attemptRef.id,
+    relatedHintRequestId: '',
+    problemCardId,
+    sessionId,
+    isSchema: false,
+    createdAt: timestamp
+  }))
+
+  batch.set(userRef, {
+    glaCoinBalance: balanceAfter,
+    totalGlaCoinEarned: currentTotalEarned + normalisedResult.glaCoinEarned,
+    updatedAt: timestamp
+  }, { merge: true })
+
+  batch.set(playerDoc(PLAYER_COLLECTIONS.gameSessions, sessionId), {
+    completedProblemCount: increment(1),
+    updatedAt: timestamp
+  }, { merge: true })
+
+  await batch.commit()
+
+  Promise.allSettled([
+    logSolutionSubmitted({
+      userId,
+      sessionId,
+      attemptId: attemptRef.id,
+      problemCardId,
+      selectedAiCardIds,
+      wordCount: explanation.trim().split(/\s+/).filter(Boolean).length
+    }),
+    logScoreReceived({
+      userId,
+      sessionId,
+      attemptId: attemptRef.id,
+      scoreId: scoreRef.id,
+      problemCardId,
+      totalScore: normalisedResult.totalScore,
+      glaCoinEarned: normalisedResult.glaCoinEarned
+    })
+  ]).catch((error) => {
+    console.error('Could not write scoring analytics in the background.', error)
   })
 
   return {

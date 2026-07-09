@@ -1,27 +1,44 @@
-async function postScore(endpoint, payload) {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
+const SCORING_ENDPOINT = '/api/deepseek/explain'
+const SCORING_TIMEOUT_MS = 25000
 
-  const data = await response.json().catch(() => ({}))
+async function postScore(endpoint, payload, timeoutMs = SCORING_TIMEOUT_MS) {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
 
-  if (!response.ok) {
-    throw new Error(
-      data.error ||
-        data.message ||
-        'The scoring engine could not score the explanation right now.'
-    )
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+          data.message ||
+          'The scoring engine could not score the explanation right now.'
+      )
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new Error('The scoring engine returned an empty result.')
+    }
+
+    return data
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Scoring is taking too long. Please check your connection and try again.')
+    }
+
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
   }
-
-  if (!data || typeof data !== 'object') {
-    throw new Error('The scoring engine returned an empty result.')
-  }
-
-  return data
 }
 
 export async function gradeExplanation({
@@ -37,16 +54,5 @@ export async function gradeExplanation({
     userExplanation
   }
 
-  const endpoints = ['/api/deepseek/explain', '/api/scoring/explain']
-  const errors = []
-
-  for (const endpoint of endpoints) {
-    try {
-      return await postScore(endpoint, payload)
-    } catch (error) {
-      errors.push(error.message)
-    }
-  }
-
-  throw new Error(errors.find(Boolean) || 'The scoring engine could not score the explanation right now.')
+  return postScore(SCORING_ENDPOINT, payload)
 }
