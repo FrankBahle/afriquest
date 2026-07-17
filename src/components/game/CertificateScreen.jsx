@@ -142,8 +142,11 @@ function CertificateScreen({
         <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', flexWrap: 'wrap', marginTop: '22px' }}>
           <span>Completed Problems: {completedProblems}</span>
           <span>Average Score: {averageScore}%</span>
-          <span>Date: {certificateUnlocked ? issueDate : 'Pending'}</span>
-        </div>
+<span>
+  Date: {certificateUnlocked
+    ? issueDate || new Date().toLocaleDateString('en-ZA')
+    : 'Pending'}
+</span>        </div>
 
         <p style={{ marginTop: '26px', fontSize: '0.9rem', fontWeight: 800 }}>
           Certificate ID: {certificateUnlocked ? certificateId : 'Pending'}
